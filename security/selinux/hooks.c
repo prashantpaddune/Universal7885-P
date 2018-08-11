@@ -196,12 +196,8 @@ static DEFINE_MUTEX(selinux_sdcardfs_lock);
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_SECURITY_SEC_SELINUX
-#if defined(CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE) && defined(CONFIG_RKP_KDP)
+#ifdef CONFIG_RKP_KDP
 RKP_RO_AREA int selinux_enforcing;
-#else
-int selinux_enforcing;
-#endif
 #else
 int selinux_enforcing;
 #endif
@@ -212,14 +208,10 @@ static int __init enforcing_setup(char *str)
 	unsigned long enforcing;
 	if (!kstrtoul(str, 0, &enforcing))
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_SECURITY_SEC_SELINUX
-#if defined(CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE)
+#if defined(CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE) || defined(CONFIG_SECURITY_SELINUX_DEFAULT_ENFORCE)
  		selinux_enforcing = 1;
-#elif defined(CONFIG_SECURITY_SELINUX_NEVER_ENFORCE)
+#elif defined(CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE) || defined(CONFIG_SECURITY_SELINUX_DEFAULT_PERMISSIVE)
 		selinux_enforcing = 0;
-#else
-		selinux_enforcing = enforcing ? 1 : 0;
-#endif
 #else
 		selinux_enforcing = enforcing ? 1 : 0;
 #endif
@@ -238,12 +230,8 @@ static int __init selinux_enabled_setup(char *str)
 	unsigned long enabled;
 	if (!kstrtoul(str, 0, &enabled))
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_SECURITY_SEC_SELINUX
 #ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 		selinux_enabled = 1;
-#else
-		selinux_enabled = enabled ? 1 : 0;
-#endif
 #else
 		selinux_enabled = enabled ? 1 : 0;
 #endif
@@ -5015,12 +5003,8 @@ static int selinux_nlmsg_perm(struct sock *sk, struct sk_buff *skb)
 			       sk->sk_protocol, nlh->nlmsg_type,
 			       secclass_map[sksec->sclass - 1].name);
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_SECURITY_SEC_SELINUX
 #ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 			if (security_get_allow_unknown())
-#else
-			if (!selinux_enforcing || security_get_allow_unknown())
-#endif
 #else
 			if (!selinux_enforcing || security_get_allow_unknown())
 #endif
@@ -6307,12 +6291,8 @@ static __init int selinux_init(void)
 {
 	if (!security_module_enable("selinux")) {
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_SECURITY_SEC_SELINUX
 #ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 		selinux_enabled = 1;
-#else
-		selinux_enabled = 0;
-#endif
 #else
 		selinux_enabled = 0;
 #endif
@@ -6345,12 +6325,10 @@ static __init int selinux_init(void)
 	if (avc_add_callback(selinux_netcache_avc_callback, AVC_CALLBACK_RESET))
 		panic("SELinux: Unable to register AVC netcache callback\n");
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_SECURITY_SEC_SELINUX
-#ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
+#if defined(CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE) || defined(CONFIG_SECURITY_SELINUX_DEFAULT_ENFORCE)
  		selinux_enforcing = 1;
-#elif defined(CONFIG_SECURITY_SELINUX_NEVER_ENFORCE)
+#elif defined(CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE) || defined(CONFIG_SECURITY_SELINUX_DEFAULT_PERMISSIVE)
 		selinux_enforcing = 0;
-#endif
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
 	if (selinux_enforcing)
@@ -6420,10 +6398,8 @@ static int __init selinux_nf_ip_init(void)
 {
 	int err;
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_SECURITY_SEC_SELINUX
 #ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 	selinux_enabled = 1;
-#endif
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
 	if (!selinux_enabled)
