@@ -20,6 +20,35 @@
 
 #include "power.h"
 
+#include <linux/moduleparam.h>
+
+
+static bool enable_sensorhub_wl = true;
+module_param(enable_sensorhub_wl, bool, 0644);
+
+static bool enable_ssp_wl = true;
+module_param(enable_ssp_wl, bool, 0644);
+
+static bool enable_mmc0_detect_wl = true;
+module_param(enable_mmc0_detect_wl, bool, 0644);
+
+static bool enable_wlan_rx_wake_wl = true;
+module_param(enable_wlan_rx_wake_wl, bool, 0644);
+
+static bool enable_wlan_ctrl_wake_wl = true;
+module_param(enable_wlan_ctrl_wake_wl, bool, 0644);
+
+static bool enable_wlan_wake_wl = true;
+module_param(enable_wlan_wake_wl, bool, 0644);
+
+static bool enable_wlan_wd_wake_wl = true;
+module_param(enable_wlan_wd_wake_wl, bool, 0644);
+
+static bool enable_bcmdhd4359_wl = true;
+module_param(enable_bcmdhd4359_wl, bool, 0644);
+
+static bool enable_bluedroid_timer_wl = true;
+module_param(enable_bluedroid_timer_wl, bool, 0644);
 
 #ifdef CONFIG_BOEFFLA_WL_BLOCKER
 #include "boeffla_wl_blocker.h"
@@ -30,7 +59,6 @@ bool wl_blocker_debug = false;
 
 static void wakeup_source_deactivate(struct wakeup_source *ws);
 #endif
-
 
 /*
  * If set, the suspend/hibernate code will abort transitions to a sleep state
@@ -542,6 +570,32 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 
 	if (WARN_ONCE(wakeup_source_not_registered(ws),
 			"unregistered wakeup source\n"))
+
+	if (!enable_sensorhub_wl && !strcmp(ws->name, "ssp_sensorhub_wake_lock"))
+		return;
+	
+	if (!enable_ssp_wl && !strcmp(ws->name, "ssp_wake_lock"))
+		return;
+
+	if (!enable_mmc0_detect_wl && !strcmp(ws->name, "mmc0_detect"))
+		return;
+
+	if (!enable_wlan_wake_wl && !strcmp(ws->name, "wlan_wake"))
+		return;
+
+	if (!enable_wlan_ctrl_wake_wl && !strcmp(ws->name, "wlan_ctrl_wake"))
+		return;
+
+	if (!enable_wlan_rx_wake_wl && !strcmp(ws->name, "wlan_rx_wake"))
+		return;
+
+	if (!enable_wlan_wd_wake_wl && !strcmp(ws->name, "wlan_wd_wake"))
+		return;
+
+	if (!enable_bcmdhd4359_wl && !strcmp(ws->name, "bcmdhd4359_wl"))
+		return;
+
+	if (!enable_bluedroid_timer_wl && !strcmp(ws->name, "bluedroid_timer"))
 		return;
 
 	/*
