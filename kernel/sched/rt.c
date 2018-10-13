@@ -2567,6 +2567,18 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
 			break;
 
 		lowest_rq = cpu_rq(cpu);
+		
+		
+		if (lowest_rq->rt.highest_prio.curr <= task->prio) {
+ 			/*
+			* Target rq has tasks of equal or higher priority,
+			* retrying does not release any lock and is unlikely
+			* to yield a different result.
+			*/
+ 			lowest_rq = NULL;
+ 			break;
+ 		}
+
 
 		if (lowest_rq->rt.highest_prio.curr <= task->prio) {
 			/*
