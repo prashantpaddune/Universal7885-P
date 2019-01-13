@@ -1,47 +1,33 @@
-dtb-$(CONFIG_ARCH_EXYNOS7) += exynos7-espresso.dtb
+dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOTLTE_EUR_OPEN) := \
+	exynos7885-jackpotlte_eur_open_00.dtb \
+	exynos7885-jackpotlte_eur_open_01.dtb \
+	exynos7885-jackpotlte_eur_open_02.dtb \
+	exynos7885-jackpotlte_eur_open_03.dtb \
+	exynos7885-jackpotlte_eur_open_04.dtb \
+	exynos7885-jackpotlte_eur_open_05.dtb \
+	exynos7885-jackpotlte_eur_open_06.dtb \
+	exynos7885-jackpotlte_eur_open_07.dtb 
 
-dtb-$(CONFIG_SOC_EXYNOS8890) += exynos8890-maestro.dtb
-dtb-$(CONFIG_SOC_EXYNOS8895) += exynos8895-smdk8895.dtb
-dtb-$(CONFIG_SOC_EMULATOR7872) += exynos7872-emulator7872.dtb
-dtb-$(CONFIG_SOC_EXYNOS7872) += exynos7872-smdk7872.dtb
-dtb-$(CONFIG_SOC_EXYNOS7872) += exynos7872-maestro7872.dtb
+dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOT2LTE_EUR_OPEN) := \
+	exynos7885-jackpot2lte_eur_open_00.dtb \
+	exynos7885-jackpot2lte_eur_open_01.dtb \
+	exynos7885-jackpot2lte_eur_open_02.dtb \
+	exynos7885-jackpot2lte_eur_open_03.dtb \
+	exynos7885-jackpot2lte_eur_open_04.dtb \
+	exynos7885-jackpot2lte_eur_open_05.dtb \
+	exynos7885-jackpot2lte_eur_open_06.dtb \
+	exynos7885-jackpot2lte_eur_open_07.dtb 
+	
+dtb-$(CONFIG_MACH_EXYNOS7885_JACKPOTLTE_CAN_OPEN) := \
+	exynos7885-jackpotlte_can_open_00.dtb \
+	exynos7885-jackpotlte_can_open_01.dtb \
+	exynos7885-jackpotlte_can_open_02.dtb \
+	exynos7885-jackpotlte_can_open_03.dtb \
+	exynos7885-jackpotlte_can_open_04.dtb \
+	exynos7885-jackpotlte_can_open_05.dtb \
+	exynos7885-jackpotlte_can_open_06.dtb \
+	exynos7885-jackpotlte_can_open_07.dtb 
 
-ifneq ($(CONFIG_SOC_EXYNOS7885_ANDROID_VERSION_P),y)
-ifeq ($(CONFIG_SOC_EXYNOS7884),y)
-dtb-y += exynos7884-universal7884.dtb
-dtb-y += exynos7884-universal7884_FHD.dtb
-else ifeq ($(CONFIG_SOC_EXYNOS7883),y)
-dtb-y += exynos7883-universal7883.dtb
-dtb-y += exynos7883-universal7883_FHD.dtb
-else
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-smdk7885.dtb
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-universal7885.dtb
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-universal7885_FHD.dtb
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-universal7885_O_Treble.dtb
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-universal7885_FHD_O_Treble.dtb
-endif
-endif
+always            := $(dtb-y) $(dtbo-y)
+clean-files       := *.dtb*
 
-ifeq ($(CONFIG_SOC_EXYNOS7885_ANDROID_VERSION_P_MR),y)
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-universal7885_FHD_P_MR.dtb
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-universal7885_P_MR.dtb
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-universal7885_FHD_P_MR_Treble.dtb
-dtb-$(CONFIG_SOC_EXYNOS7885) += exynos7885-universal7885_P_MR_Treble.dtb
-always		:= $(dtb-y)
-subdir-y	:= $(dts-dirs)
-clean-files	:= *.dtb
-else
-ifeq ($(CONFIG_SOC_EXYNOS7885_ANDROID_VERSION_P),y)
-dts-dirs := dtbo
-endif
-
-ifeq ($(CONFIG_SOC_EXYNOS7885_ANDROID_VERSION_P),y)
-always		:= $(dtb-y) $(dtbo-y)
-subdir-y	:= $(dts-dirs)
-clean-files	:= *.dtb *.dtbo
-else
-always		:= $(dtb-y)
-subdir-y	:= $(dts-dirs)
-clean-files	:= *.dtb
-endif
-endif
