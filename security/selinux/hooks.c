@@ -85,7 +85,9 @@
 #include <linux/shm.h>
 
 // [ SEC_SELINUX_PORTING_COMMON
+#ifdef CONFIG_SECURITY_SEC_SELINUX
 #include <linux/delay.h>
+#endif
 // ] SEC_SELINUX_PORTING_COMMON
 
 #include "avc.h"
@@ -102,13 +104,19 @@
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
 
 // [ SEC_SELINUX_PORTING_COMMON
+#ifdef CONFIG_SECURITY_SEC_SELINUX
 static DEFINE_MUTEX(selinux_sdcardfs_lock);
+#endif
 // ] SEC_SELINUX_PORTING_COMMON
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 // [ SEC_SELINUX_PORTING_COMMON
-#if defined(CONFIG_ALWAYS_ENFORCE) && defined(CONFIG_RKP_KDP)
+#ifdef CONFIG_SECURITY_SEC_SELINUX
+#if defined(CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE) && defined(CONFIG_RKP_KDP)
 RKP_RO_AREA int selinux_enforcing;
+#else
+int selinux_enforcing;
+#endif
 #else
 int selinux_enforcing;
 #endif
@@ -119,8 +127,14 @@ static int __init enforcing_setup(char *str)
 	unsigned long enforcing;
 	if (!kstrtoul(str, 0, &enforcing))
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_ALWAYS_ENFORCE
-		selinux_enforcing = 1;
+#ifdef CONFIG_SECURITY_SEC_SELINUX
+#if defined(CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE)
+ 		selinux_enforcing = 1;
+#elif defined(CONFIG_SECURITY_SELINUX_NEVER_ENFORCE)
+		selinux_enforcing = 0;
+#else
+		selinux_enforcing = enforcing ? 1 : 0;
+#endif
 #else
 		selinux_enforcing = enforcing ? 1 : 0;
 #endif
@@ -138,8 +152,12 @@ static int __init selinux_enabled_setup(char *str)
 	unsigned long enabled;
 	if (!kstrtoul(str, 0, &enabled))
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_ALWAYS_ENFORCE
+#ifdef CONFIG_SECURITY_SEC_SELINUX
+#ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 		selinux_enabled = 1;
+#else
+		selinux_enabled = enabled ? 1 : 0;
+#endif
 #else
 		selinux_enabled = enabled ? 1 : 0;
 #endif
@@ -2707,14 +2725,23 @@ static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data)
 
 	rc = superblock_doinit(sb, data);
 	if (rc)
+#ifdef CONFIG_SECURITY_SEC_SELINUX
 		goto out;
+#else
+		return rc;
+#endif
 
 	/* Allow all mounts performed by the kernel */
 	if (flags & MS_KERNMOUNT)
+#ifdef CONFIG_SECURITY_SEC_SELINUX
 		goto out;
+#else
+		return 0;
+#endif
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
 	ad.u.dentry = sb->s_root;
+#ifdef CONFIG_SECURITY_SEC_SELINUX
 	rc = superblock_has_perm(cred, sb, FILESYSTEM__MOUNT, &ad);
 
 out:
@@ -2723,6 +2750,9 @@ out:
 	// ] SEC_SELINUX_PORTING_COMMON
 
 	return rc;
+#else
+	return superblock_has_perm(cred, sb, FILESYSTEM__MOUNT, &ad);
+#endif
 }
 
 static int selinux_sb_statfs(struct dentry *dentry)
@@ -2951,7 +2981,8 @@ static int selinux_inode_permission(struct inode *inode, int mask)
 	sid = cred_sid(cred);
 	isec = inode->i_security;
 
-// [ SEC_SELINUX_PORTING_COMMON
+// [ SEC_SELINUX_PORTING_COMMONù
+#ifdef CONFIG_SECURITY_SEC_SELINUX
 	/* skip sid == 1(kernel), it means first boot time */
 	if (isec->initialized != 1 && sid != 1) {
 		int count = 5;
@@ -2968,6 +2999,7 @@ static int selinux_inode_permission(struct inode *inode, int mask)
 			printk(KERN_ERR "SELinux : inode->i_security is not initialized. not fixed.\n");
 		}
 	}
+#endif
 // ] SEC_SELINUX_PORTING_COMMON
 
 	rc = avc_has_perm_noaudit(sid, isec->sid, isec->sclass, perms, 0, &avd);
@@ -4881,8 +4913,12 @@ static int selinux_nlmsg_perm(struct sock *sk, struct sk_buff *skb)
 			       sk->sk_protocol, nlh->nlmsg_type,
 			       secclass_map[sksec->sclass - 1].name);
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_ALWAYS_ENFORCE
+#ifdef CONFIG_SECURITY_SEC_SELINUX
+#ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 			if (security_get_allow_unknown())
+#else
+			if (!selinux_enforcing || security_get_allow_unknown())
+#endif
 #else
 			if (!selinux_enforcing || security_get_allow_unknown())
 #endif
@@ -6168,8 +6204,12 @@ static __init int selinux_init(void)
 {
 	if (!security_module_enable("selinux")) {
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_ALWAYS_ENFORCE
+#ifdef CONFIG_SECURITY_SEC_SELINUX
+#ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 		selinux_enabled = 1;
+#else
+		selinux_enabled = 0;
+#endif
 #else
 		selinux_enabled = 0;
 #endif
@@ -6202,8 +6242,12 @@ static __init int selinux_init(void)
 	if (avc_add_callback(selinux_netcache_avc_callback, AVC_CALLBACK_RESET))
 		panic("SELinux: Unable to register AVC netcache callback\n");
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_ALWAYS_ENFORCE
-		selinux_enforcing = 1;
+#ifdef CONFIG_SECURITY_SEC_SELINUX
+#ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
+ 		selinux_enforcing = 1;
+#elif defined(CONFIG_SECURITY_SELINUX_NEVER_ENFORCE)
+		selinux_enforcing = 0;
+#endif
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
 	if (selinux_enforcing)
@@ -6273,8 +6317,10 @@ static int __init selinux_nf_ip_init(void)
 {
 	int err;
 // [ SEC_SELINUX_PORTING_COMMON
-#ifdef CONFIG_ALWAYS_ENFORCE
+#ifdef CONFIG_SECURITY_SEC_SELINUX
+#ifdef CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE
 	selinux_enabled = 1;
+#endif
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
 	if (!selinux_enabled)
