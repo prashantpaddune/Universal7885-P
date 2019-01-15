@@ -27,7 +27,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-v4l2.h>
 
-#include "exynos_mfc_media.h"
+#include <linux/exynos_mfc_media.h>
 #include "s5p_mfc_nal_q_struct.h"
 
 #define MFC_NUM_CONTEXTS		32

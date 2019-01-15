@@ -17,7 +17,6 @@
 #include "s5p_mfc_regs_v10.h"
 #include "s5p_mfc_macros.h"
 #include "s5p_mfc_debug.h"
-#include "exynos_mfc_media.h"
 #include "s5p_mfc_data_struct.h"
 
 #define MFC_DRIVER_INFO		170607
