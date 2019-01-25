@@ -4261,6 +4261,10 @@ drivers/usb/gadget/udc/.udc-core.o.cmd
 drivers/usb/gadget/udc/built-in.o
 drivers/usb/gadget/udc/udc-core.o
 drivers/usb/gadget/usbstring.o
+drivers/usb/gadget/function/.f_mtp.o.cmd
+drivers/usb/gadget/function/.usb_f_mtp.o.cmd
+drivers/usb/gadget/function/f_mtp.o
+drivers/usb/gadget/function/usb_f_mtp.o
 drivers/usb/host/.built-in.o.cmd
 drivers/usb/host/.xhci-dbg.o.cmd
 drivers/usb/host/.xhci-hcd.o.cmd
