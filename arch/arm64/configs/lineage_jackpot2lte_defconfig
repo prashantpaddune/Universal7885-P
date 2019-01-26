@@ -479,7 +479,7 @@ CONFIG_ARM64_PAN=y
 #
 # Boot options
 #
-CONFIG_CMDLINE="androidboot.selinux=permissive"
+CONFIG_CMDLINE=""
 # CONFIG_EFI is not set
 # CONFIG_TIMA is not set
 # CONFIG_TIMA_LKMAUTH is not set
