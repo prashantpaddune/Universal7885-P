@@ -41,6 +41,9 @@ CR_VARIANT_A530F=A530F
 # Device specific Variables [SM-A730F]
 CR_CONFG_A730F=lineage_jackpot2lte_defconfig
 CR_VARIANT_A730F=A730F
+# Device specific Variables [SM-A530W]
+CR_CONFG_A530W=lineage_jackpotltecan_defconfig
+CR_VARIANT_A530W=A530W
 ##########################################
 
 # Script functions
@@ -77,7 +80,7 @@ echo "----------------------------------------------"
 echo "$CR_NAME $CR_VERSION Build Script"
 echo "----------------------------------------------"
 PS3='Please select your option : '
-menuvar=("SM-A530F" "SM-A730F" "Exit")
+menuvar=("SM-A530F" "SM-A530W" "SM-A730F" "Exit")
 select menuvar in "${menuvar[@]}"
 do
     case $menuvar in
@@ -102,6 +105,21 @@ do
             echo "Starting $CR_VARIANT_A730F kernel build..."
 	    CR_VARIANT=$CR_VARIANT_A730F
 	    CR_CONFG=$CR_CONFG_A730F
+	    BUILD_ZIMAGE
+            echo " "
+            echo "----------------------------------------------"
+            echo "$CR_VARIANT kernel build finished."
+	    echo "Press Any key to end the script"
+            echo "----------------------------------------------"
+            read -n1 -r key
+            break
+            ;;
+        "SM-A530W")
+            clear
+            CLEAN_SOURCE
+            echo "Starting $CR_VARIANT_A530W kernel build..."
+	    CR_VARIANT=$CR_VARIANT_A530W
+	    CR_CONFG=$CR_CONFG_A530W
 	    BUILD_ZIMAGE
             echo " "
             echo "----------------------------------------------"
