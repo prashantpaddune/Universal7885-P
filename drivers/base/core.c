@@ -28,6 +28,10 @@
 #include <linux/netdevice.h>
 #include <linux/sysfs.h>
 
+#ifdef CONFIG_ARCH_EXYNOS
+#include <soc/samsung/exynos-cpu_hotplug.h>
+#endif
+
 #include "base.h"
 #include "power/power.h"
 
@@ -430,7 +434,10 @@ static ssize_t online_show(struct device *dev, struct device_attribute *attr,
 	bool val;
 
 	device_lock(dev);
-	val = !dev->offline;
+	if (!strcmp(dev->bus->name, "cpu"))
+		val = !!cpu_online(dev->id);
+	else
+		val = !dev->offline;
 	device_unlock(dev);
 	return sprintf(buf, "%u\n", val);
 }
@@ -440,6 +447,13 @@ static ssize_t online_store(struct device *dev, struct device_attribute *attr,
 {
 	bool val;
 	int ret;
+
+#ifdef CONFIG_ARCH_EXYNOS
+	if (!strcmp(dev->bus->name, "cpu") && exynos_cpu_hotplug_enabled()) {
+		pr_info("Block cpu/online node by Exynos cpu-hotplug\n");
+		return -EPERM;
+	}
+#endif
 
 	ret = strtobool(buf, &val);
 	if (ret < 0)
@@ -836,21 +850,34 @@ static struct kobject *get_device_parent(struct device *dev,
 	return NULL;
 }
 
+static inline bool live_in_glue_dir(struct kobject *kobj,
+				    struct device *dev)
+{
+	if (!kobj || !dev->class ||
+	    kobj->kset != &dev->class->p->glue_dirs)
+		return false;
+	return true;
+}
+
+static inline struct kobject *get_glue_dir(struct device *dev)
+{
+	return dev->kobj.parent;
+}
+
+/*
+ * make sure cleaning up dir as the last step, we need to make
+ * sure .release handler of kobject is run with holding the
+ * global lock
+ */
 static void cleanup_glue_dir(struct device *dev, struct kobject *glue_dir)
 {
 	/* see if we live in a "glue" directory */
-	if (!glue_dir || !dev->class ||
-	    glue_dir->kset != &dev->class->p->glue_dirs)
+	if (!live_in_glue_dir(glue_dir, dev))
 		return;
 
 	mutex_lock(&gdp_mutex);
 	kobject_put(glue_dir);
 	mutex_unlock(&gdp_mutex);
-}
-
-static void cleanup_device_parent(struct device *dev)
-{
-	cleanup_glue_dir(dev, dev->kobj.parent);
 }
 
 static int device_add_class_symlinks(struct device *dev)
@@ -1028,6 +1055,7 @@ int device_add(struct device *dev)
 	struct kobject *kobj;
 	struct class_interface *class_intf;
 	int error = -EINVAL;
+	struct kobject *glue_dir = NULL;
 
 	dev = get_device(dev);
 	if (!dev)
@@ -1072,8 +1100,10 @@ int device_add(struct device *dev)
 	/* first, register with generic layer. */
 	/* we require the name to be set before, and pass NULL */
 	error = kobject_add(&dev->kobj, dev->kobj.parent, NULL);
-	if (error)
+	if (error) {
+		glue_dir = get_glue_dir(dev);
 		goto Error;
+	}
 
 	/* notify platform of device entry */
 	if (platform_notify)
@@ -1154,9 +1184,10 @@ done:
 	device_remove_file(dev, &dev_attr_uevent);
  attrError:
 	kobject_uevent(&dev->kobj, KOBJ_REMOVE);
+	glue_dir = get_glue_dir(dev);
 	kobject_del(&dev->kobj);
  Error:
-	cleanup_device_parent(dev);
+	cleanup_glue_dir(dev, glue_dir);
 	put_device(parent);
 name_error:
 	kfree(dev->p);
@@ -1232,6 +1263,7 @@ EXPORT_SYMBOL_GPL(put_device);
 void device_del(struct device *dev)
 {
 	struct device *parent = dev->parent;
+	struct kobject *glue_dir = NULL;
 	struct class_interface *class_intf;
 
 	/* Notify clients of device removal.  This call must come
@@ -1276,8 +1308,9 @@ void device_del(struct device *dev)
 		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
 					     BUS_NOTIFY_REMOVED_DEVICE, dev);
 	kobject_uevent(&dev->kobj, KOBJ_REMOVE);
-	cleanup_device_parent(dev);
+	glue_dir = get_glue_dir(dev);
 	kobject_del(&dev->kobj);
+	cleanup_glue_dir(dev, glue_dir);
 	put_device(parent);
 }
 EXPORT_SYMBOL_GPL(device_del);
@@ -1501,7 +1534,14 @@ static int device_check_offline(struct device *dev, void *not_used)
 	if (ret)
 		return ret;
 
-	return device_supports_offline(dev) && !dev->offline ? -EBUSY : 0;
+	if (device_supports_offline(dev)) {
+		if (!strcmp(dev->bus->name, "cpu"))
+			ret = cpu_online(dev->id) ? -EBUSY : 0;
+		else
+			ret = !dev->offline ? -EBUSY : 0;
+	}
+
+	return ret;
 }
 
 /**
@@ -1518,6 +1558,7 @@ static int device_check_offline(struct device *dev, void *not_used)
 int device_offline(struct device *dev)
 {
 	int ret;
+	bool cpu_device = false;
 
 	if (dev->offline_disabled)
 		return -EPERM;
@@ -1528,13 +1569,17 @@ int device_offline(struct device *dev)
 
 	device_lock(dev);
 	if (device_supports_offline(dev)) {
-		if (dev->offline) {
+		if (!strcmp(dev->bus->name, "cpu"))
+			cpu_device = true;
+
+		if ((cpu_device && !cpu_online(dev->id)) || (dev->offline)) {
 			ret = 1;
 		} else {
 			ret = dev->bus->offline(dev);
 			if (!ret) {
 				kobject_uevent(&dev->kobj, KOBJ_OFFLINE);
-				dev->offline = true;
+				if (!cpu_device)
+					dev->offline = true;
 			}
 		}
 	}
@@ -1556,14 +1601,19 @@ int device_offline(struct device *dev)
 int device_online(struct device *dev)
 {
 	int ret = 0;
+	bool cpu_device = false;
 
 	device_lock(dev);
 	if (device_supports_offline(dev)) {
-		if (dev->offline) {
+		if (!strcmp(dev->bus->name, "cpu"))
+			cpu_device = true;
+
+		if ((cpu_device && !cpu_online(dev->id)) || dev->offline) {
 			ret = dev->bus->online(dev);
 			if (!ret) {
 				kobject_uevent(&dev->kobj, KOBJ_ONLINE);
-				dev->offline = false;
+				if (!cpu_device)
+					dev->offline = false;
 			}
 		} else {
 			ret = 1;
@@ -2075,7 +2125,11 @@ void device_shutdown(void)
 		pm_runtime_get_noresume(dev);
 		pm_runtime_barrier(dev);
 
-		if (dev->bus && dev->bus->shutdown) {
+		if (dev->class && dev->class->shutdown) {
+			if (initcall_debug)
+				dev_info(dev, "shutdown\n");
+			dev->class->shutdown(dev);
+		} else if (dev->bus && dev->bus->shutdown) {
 			if (initcall_debug)
 				dev_info(dev, "shutdown\n");
 			dev->bus->shutdown(dev);

@@ -124,6 +124,28 @@ void disable_debug_monitors(enum dbg_active_el el)
 	}
 }
 
+#ifdef CONFIG_SEC_KWATCHER
+/*
+ * restore mdscr register
+ */
+void restore_debug_monitors(void)
+{
+	u32 mdscr, enable = 0;
+
+	if (this_cpu_read(mde_ref_count) >= 1)
+		enable = DBG_MDSCR_MDE;
+
+	if (this_cpu_read(kde_ref_count) >= 1)
+		enable |= DBG_MDSCR_KDE;
+
+	if (enable && debug_enabled) {
+		mdscr = mdscr_read();
+		mdscr |= enable;
+		mdscr_write(mdscr);
+	}
+}
+#endif
+
 /*
  * OS lock clearing.
  */
@@ -152,7 +174,6 @@ static int debug_monitors_init(void)
 	/* Clear the OS lock. */
 	on_each_cpu(clear_os_lock, NULL, 1);
 	isb();
-	local_dbg_enable();
 
 	/* Register hotplug handler. */
 	__register_cpu_notifier(&os_lock_nb);
@@ -423,8 +444,10 @@ int kernel_active_single_step(void)
 /* ptrace API */
 void user_enable_single_step(struct task_struct *task)
 {
-	set_ti_thread_flag(task_thread_info(task), TIF_SINGLESTEP);
-	set_regs_spsr_ss(task_pt_regs(task));
+	struct thread_info *ti = task_thread_info(task);
+
+	if (!test_and_set_ti_thread_flag(ti, TIF_SINGLESTEP))
+		set_regs_spsr_ss(task_pt_regs(task));
 }
 
 void user_disable_single_step(struct task_struct *task)

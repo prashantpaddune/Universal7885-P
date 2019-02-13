@@ -241,7 +241,7 @@ config ARM_PXA2xx_CPUFREQ
 
 config ACPI_CPPC_CPUFREQ
 	tristate "CPUFreq driver based on the ACPI CPPC spec"
-	depends on ACPI
+	depends on ACPI_PROCESSOR
 	select ACPI_CPPC_LIB
 	default n
 	help
@@ -253,5 +253,14 @@ config ACPI_CPPC_CPUFREQ
 	  processor to flexibly optimize for power and
 	  performance. CPPC relies on power management firmware
 	  support for its operation.
+
+	  If in doubt, say N.
+
+config ARM_EXYNOS_ACME
+	bool "SAMSUNG EXYNOS ACME(A Cpufreq that Meets Every chipset) driver"
+	depends on ARCH_EXYNOS
+	  help
+	  This adds the CPUFreq driver for every exynos chipset. Exynos
+	  ACME supported SoC must use the exynos CAL framework.
 
 	  If in doubt, say N.

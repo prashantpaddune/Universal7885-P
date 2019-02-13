@@ -357,6 +357,7 @@ int crypto_register_alg(struct crypto_alg *alg)
 	struct crypto_larval *larval;
 	int err;
 
+	alg->cra_flags &= ~CRYPTO_ALG_DEAD;
 	err = crypto_check_alg(alg);
 	if (err)
 		return err;
@@ -987,6 +988,21 @@ unsigned int crypto_alg_extsize(struct crypto_alg *alg)
 	       (alg->cra_alignmask & ~(crypto_tfm_ctx_alignment() - 1));
 }
 EXPORT_SYMBOL_GPL(crypto_alg_extsize);
+
+int crypto_type_has_alg(const char *name, const struct crypto_type *frontend,
+			u32 type, u32 mask)
+{
+	int ret = 0;
+	struct crypto_alg *alg = crypto_find_alg(name, frontend, type, mask);
+
+	if (!IS_ERR(alg)) {
+		crypto_mod_put(alg);
+		ret = 1;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(crypto_type_has_alg);
 
 static int __init crypto_algapi_init(void)
 {

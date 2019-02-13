@@ -92,8 +92,30 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 	bool do_split = true;
 	struct bio *new = NULL;
 	const unsigned max_sectors = get_max_io_size(q, bio);
+	unsigned bvecs = 0;
 
 	bio_for_each_segment(bv, bio, iter) {
+		/*
+		 * With arbitrary bio size, the incoming bio may be very
+		 * big. We have to split the bio into small bios so that
+		 * each holds at most BIO_MAX_PAGES bvecs because
+		 * bio_clone() can fail to allocate big bvecs.
+		 *
+		 * It should have been better to apply the limit per
+		 * request queue in which bio_clone() is involved,
+		 * instead of globally. The biggest blocker is the
+		 * bio_clone() in bio bounce.
+		 *
+		 * If bio is splitted by this reason, we should have
+		 * allowed to continue bios merging, but don't do
+		 * that now for making the change simple.
+		 *
+		 * TODO: deal with bio bounce's bio_clone() gracefully
+		 * and convert the global limit into per-queue limit.
+		 */
+		if (bvecs++ >= BIO_MAX_PAGES)
+			goto split;
+
 		/*
 		 * If the queue doesn't support SG gaps and adding this
 		 * offset would create a gap, disallow it.
@@ -641,6 +663,51 @@ static void blk_account_io_merge(struct request *req)
 	}
 }
 
+static struct inode *get_inode_from_bio(struct bio *bio)
+{
+	if (!bio)
+		return NULL;
+	if (!bio_has_data((struct bio *)bio))
+		return NULL;
+	if (!bio->bi_io_vec)
+		return NULL;
+	if (!bio->bi_io_vec->bv_page)
+		return NULL;
+	if (PageAnon(bio->bi_io_vec->bv_page)) {
+		struct inode *inode;
+
+		/* Using direct-io (O_DIRECT) without page cache */
+		inode = bio->bi_dio_inode;
+		return inode;
+	}
+
+	if (!bio->bi_io_vec->bv_page->mapping)
+		return NULL;
+	if (!bio->bi_io_vec->bv_page->mapping->host)
+		return NULL;
+	return bio->bi_io_vec->bv_page->mapping->host;
+}
+
+static bool inode_is_data_equal(void *data1, void *data2)
+{
+	/* pointer comparison*/
+	return data1 == data2;
+}
+
+static bool allow_merge_bio_for_encryption(struct bio *bio1, struct bio *bio2)
+{
+	struct inode *inode1 = NULL;
+	struct inode *inode2 = NULL;
+
+	inode1 = get_inode_from_bio(bio1);
+	inode2 = get_inode_from_bio(bio2);
+
+	if (!inode_is_data_equal(inode1, inode2))
+		return false;
+
+	return true;
+}
+
 /*
  * Has to be called with the request spinlock acquired
  */
@@ -666,6 +733,9 @@ static int attempt_merge(struct request_queue *q, struct request *req,
 
 	if (req->cmd_flags & REQ_WRITE_SAME &&
 	    !blk_write_same_mergeable(req->bio, next->bio))
+		return 0;
+
+	if (!allow_merge_bio_for_encryption(req->bio, next->bio))
 		return 0;
 
 	/*
@@ -771,6 +841,16 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 	if (rq->cmd_flags & REQ_WRITE_SAME &&
 	    !blk_write_same_mergeable(rq->bio, bio))
 		return false;
+
+	if (!allow_merge_bio_for_encryption(rq->bio, bio))
+		return false;
+
+#ifdef CONFIG_JOURNAL_DATA_TAG
+	/* journal tagged bio can only be merged to REQ_META request */
+	if ((bio_flagged(bio, BIO_JMETA) || bio_flagged(bio, BIO_JOURNAL))
+			&& !(rq->cmd_flags & REQ_META))
+		return false;
+#endif
 
 	return true;
 }

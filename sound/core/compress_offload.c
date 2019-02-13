@@ -865,6 +865,7 @@ static const struct file_operations snd_compr_file_ops = {
 		.write =	snd_compr_write,
 		.read =		snd_compr_read,
 		.unlocked_ioctl = snd_compr_ioctl,
+		.compat_ioctl	= snd_compr_ioctl,
 		.mmap =		snd_compr_mmap,
 		.poll =		snd_compr_poll,
 };
@@ -872,14 +873,13 @@ static const struct file_operations snd_compr_file_ops = {
 static int snd_compress_dev_register(struct snd_device *device)
 {
 	int ret = -EINVAL;
-	char str[16];
 	struct snd_compr *compr;
 
 	if (snd_BUG_ON(!device || !device->device_data))
 		return -EBADFD;
 	compr = device->device_data;
 
-	pr_debug("reg %s for device %s, direction %d\n", str, compr->name,
+	pr_debug("reg device %s, direction %d\n", compr->name,
 			compr->direction);
 	/* register compressed device */
 	ret = snd_register_device(SNDRV_DEVICE_TYPE_COMPRESS,

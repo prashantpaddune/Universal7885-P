@@ -55,22 +55,20 @@ static const char *dwc3_ep0_state_string(enum dwc3_ep0_state state)
 	}
 }
 
-static int dwc3_ep0_start_trans(struct dwc3 *dwc, u8 epnum, dma_addr_t buf_dma,
-		u32 len, u32 type, bool chain)
+static void dwc3_ep0_prepare_one_trb(struct dwc3 *dwc, u8 epnum,
+		dma_addr_t buf_dma, u32 len, u32 type, bool chain)
 {
-	struct dwc3_gadget_ep_cmd_params params;
 	struct dwc3_trb			*trb;
 	struct dwc3_ep			*dep;
 
-	int				ret;
-
 	dep = dwc->eps[epnum];
-	if (dep->flags & DWC3_EP_BUSY) {
-		dwc3_trace(trace_dwc3_ep0, "%s still busy", dep->name);
-		return 0;
-	}
 
 	trb = &dwc->ep0_trb[dep->free_slot];
+
+	if (!trb) {
+		dev_err(dwc->dev, "trb is NULL\n");
+		return;
+	}
 
 	if (chain)
 		dep->free_slot++;
@@ -80,6 +78,12 @@ static int dwc3_ep0_start_trans(struct dwc3 *dwc, u8 epnum, dma_addr_t buf_dma,
 	trb->size = len;
 	trb->ctrl = type;
 
+	if (trb->bpl == 0 && trb->bph == 0) {
+		dev_err(dwc->dev, "trb buffer addr is NULL\n");
+		trb->size = 0;
+		trb->ctrl = 0;
+		return;
+	}
 	trb->ctrl |= (DWC3_TRB_CTRL_HWO
 			| DWC3_TRB_CTRL_ISP_IMI);
 
@@ -89,14 +93,24 @@ static int dwc3_ep0_start_trans(struct dwc3 *dwc, u8 epnum, dma_addr_t buf_dma,
 		trb->ctrl |= (DWC3_TRB_CTRL_IOC
 				| DWC3_TRB_CTRL_LST);
 
-	if (chain)
+	trace_dwc3_prepare_trb(dep, trb);
+}
+
+static int dwc3_ep0_start_trans(struct dwc3 *dwc, u8 epnum)
+{
+	struct dwc3_gadget_ep_cmd_params params;
+	struct dwc3_ep			*dep;
+	int				ret;
+
+	dep = dwc->eps[epnum];
+	if (dep->flags & DWC3_EP_BUSY) {
+		dwc3_trace(trace_dwc3_ep0, "%s still busy", dep->name);
 		return 0;
+	}
 
 	memset(&params, 0, sizeof(params));
 	params.param0 = upper_32_bits(dwc->ep0_trb_addr);
 	params.param1 = lower_32_bits(dwc->ep0_trb_addr);
-
-	trace_dwc3_prepare_trb(dep, trb);
 
 	ret = dwc3_send_gadget_ep_cmd(dwc, dep->number,
 			DWC3_DEPCMD_STARTTRANSFER, &params);
@@ -262,13 +276,22 @@ static void dwc3_ep0_stall_and_restart(struct dwc3 *dwc)
 {
 	struct dwc3_ep		*dep;
 
+	if (dwc->eps[1]->endpoint.desc == NULL) {
+		dev_err(dwc->dev, "EP1 was disabled: DESC NULL\n");
+		return;
+	}
+	if (dwc->eps[0]->endpoint.desc == NULL) {
+		dev_err(dwc->dev, "EP0 was disabled: DESC NULL\n");
+		return;
+	}
+
 	/* reinitialize physical ep1 */
 	dep = dwc->eps[1];
 	dep->flags = DWC3_EP_ENABLED;
 
 	/* stall is always issued on EP0 */
 	dep = dwc->eps[0];
-	__dwc3_gadget_ep_set_halt(dep, 1, false);
+	__dwc3_gadget_ep_set_halt(dep, 1, true);
 	dep->flags = DWC3_EP_ENABLED;
 	dwc->delayed_status = false;
 
@@ -311,8 +334,9 @@ void dwc3_ep0_out_start(struct dwc3 *dwc)
 {
 	int				ret;
 
-	ret = dwc3_ep0_start_trans(dwc, 0, dwc->ctrl_req_addr, 8,
+	dwc3_ep0_prepare_one_trb(dwc, 0, dwc->ctrl_req_addr, 8,
 			DWC3_TRBCTL_CONTROL_SETUP, false);
+	ret = dwc3_ep0_start_trans(dwc, 0);
 	WARN_ON(ret < 0);
 }
 
@@ -429,6 +453,10 @@ static int dwc3_ep0_handle_feature(struct dwc3 *dwc,
 			if (dwc->speed != DWC3_DSTS_SUPERSPEED)
 				return -EINVAL;
 
+			/* see NEGATIVE RX DETECTION comment */
+			if (set && dwc->revision < DWC3_REVISION_230A)
+				return 0;
+
 			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 			if (set)
 				reg |= DWC3_DCTL_INITU1ENA;
@@ -442,6 +470,10 @@ static int dwc3_ep0_handle_feature(struct dwc3 *dwc,
 				return -EINVAL;
 			if (dwc->speed != DWC3_DSTS_SUPERSPEED)
 				return -EINVAL;
+
+			/* see NEGATIVE RX DETECTION comment */
+			if (set && dwc->revision < DWC3_REVISION_230A)
+				return 0;
 
 			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 			if (set)
@@ -577,12 +609,26 @@ static int dwc3_ep0_set_config(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 						USB_STATE_CONFIGURED);
 
 			/*
-			 * Enable transition to U1/U2 state when
-			 * nothing is pending from application.
+			 * NEGATIVE RX DETECTION
+			 * Some host controllers (e.g. Intel) perform far-end
+			 * receiver termination _negative_ detection while link
+			 * is in U2 state. Synopsys PIPE PHY considers this
+			 * signalling as U2 LFPS exit, moves to Recovery state
+			 * and waits for training sequence which never comes.
+			 * This finally leads to reconnection. Starting from
+			 * DWC3 core 2.30a, GCTL register has bit U2EXIT_LFPS,
+			 * which improves interoperability with such HCs.
 			 */
-			reg = dwc3_readl(dwc->regs, DWC3_DCTL);
-			reg |= (DWC3_DCTL_ACCEPTU1ENA | DWC3_DCTL_ACCEPTU2ENA);
-			dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+			if (dwc->revision >= DWC3_REVISION_230A) {
+				/*
+				 * Enable transition to U1/U2 state when
+				 * nothing is pending from application.
+				 */
+				reg = dwc3_readl(dwc->regs, DWC3_DCTL);
+				reg |= (DWC3_DCTL_ACCEPTU1ENA |
+						DWC3_DCTL_ACCEPTU2ENA);
+				dwc3_writel(dwc->regs, DWC3_DCTL, reg);
+			}
 
 			dwc->resize_fifos = true;
 			dwc3_trace(trace_dwc3_ep0, "resize FIFOs flag SET");
@@ -726,6 +772,13 @@ static int dwc3_ep0_std_request(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 		break;
 	case USB_REQ_SET_CONFIGURATION:
 		dwc3_trace(trace_dwc3_ep0, "USB_REQ_SET_CONFIGURATION");
+
+		if(dwc->gadget.speed == USB_SPEED_SUPER)
+			dwc->vbus_curernt = USB_CURRENT_SUPER_SPEED;
+		else
+			dwc->vbus_curernt = USB_CURRENT_HIGH_SPEED;
+		schedule_work(&dwc->set_vbus_current_work);
+
 		ret = dwc3_ep0_set_config(dwc, ctrl);
 		break;
 	case USB_REQ_SET_SEL:
@@ -871,9 +924,9 @@ static void dwc3_ep0_complete_data(struct dwc3 *dwc,
 
 			dwc->ep0_next_event = DWC3_EP0_COMPLETE;
 
-			ret = dwc3_ep0_start_trans(dwc, epnum,
-					dwc->ctrl_req_addr, 0,
-					DWC3_TRBCTL_CONTROL_DATA, false);
+			dwc3_ep0_prepare_one_trb(dwc, epnum, dwc->ctrl_req_addr,
+					0, DWC3_TRBCTL_CONTROL_DATA, false);
+			ret = dwc3_ep0_start_trans(dwc, epnum);
 			WARN_ON(ret < 0);
 		}
 	}
@@ -955,27 +1008,32 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 	req->direction = !!dep->number;
 
 	if (req->request.length == 0) {
-		ret = dwc3_ep0_start_trans(dwc, dep->number,
+		dwc3_ep0_prepare_one_trb(dwc, dep->number,
 				dwc->ctrl_req_addr, 0,
 				DWC3_TRBCTL_CONTROL_DATA, false);
+		ret = dwc3_ep0_start_trans(dwc, dep->number);
 	} else if (!IS_ALIGNED(req->request.length, dep->endpoint.maxpacket)
 			&& (dep->number == 0)) {
 		u32	transfer_size = 0;
 		u32	maxpacket;
-
-		ret = usb_gadget_map_request(&dwc->gadget, &req->request,
-				dep->number);
-		if (ret) {
-			dev_dbg(dwc->dev, "failed to map request\n");
-			return;
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+		if (req->request.length > DWC3_EP0_BOUNCE_SIZE) {
+#endif
+			ret = usb_gadget_map_request(&dwc->gadget, &req->request,
+					dep->number);
+			if (ret) {
+				dev_dbg(dwc->dev, "failed to map request\n");
+				return;
+			}
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 		}
-
+#endif
 		maxpacket = dep->endpoint.maxpacket;
 
 		if (req->request.length > DWC3_EP0_BOUNCE_SIZE) {
 			transfer_size = ALIGN(req->request.length - maxpacket,
 					      maxpacket);
-			ret = dwc3_ep0_start_trans(dwc, dep->number,
+			dwc3_ep0_prepare_one_trb(dwc, dep->number,
 						   req->request.dma,
 						   transfer_size,
 						   DWC3_TRBCTL_CONTROL_DATA,
@@ -987,9 +1045,10 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 
 		dwc->ep0_bounced = true;
 
-		ret = dwc3_ep0_start_trans(dwc, dep->number,
+		dwc3_ep0_prepare_one_trb(dwc, dep->number,
 				dwc->ep0_bounce_addr, transfer_size,
 				DWC3_TRBCTL_CONTROL_DATA, false);
+		ret = dwc3_ep0_start_trans(dwc, dep->number);
 	} else {
 		ret = usb_gadget_map_request(&dwc->gadget, &req->request,
 				dep->number);
@@ -998,9 +1057,10 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 			return;
 		}
 
-		ret = dwc3_ep0_start_trans(dwc, dep->number, req->request.dma,
+		dwc3_ep0_prepare_one_trb(dwc, dep->number, req->request.dma,
 				req->request.length, DWC3_TRBCTL_CONTROL_DATA,
 				false);
+		ret = dwc3_ep0_start_trans(dwc, dep->number);
 	}
 
 	WARN_ON(ret < 0);
@@ -1014,8 +1074,9 @@ static int dwc3_ep0_start_control_status(struct dwc3_ep *dep)
 	type = dwc->three_stage_setup ? DWC3_TRBCTL_CONTROL_STATUS3
 		: DWC3_TRBCTL_CONTROL_STATUS2;
 
-	return dwc3_ep0_start_trans(dwc, dep->number,
+	dwc3_ep0_prepare_one_trb(dwc, dep->number,
 			dwc->ctrl_req_addr, 0, type, false);
+	return dwc3_ep0_start_trans(dwc, dep->number);
 }
 
 static void __dwc3_ep0_do_control_status(struct dwc3 *dwc, struct dwc3_ep *dep)

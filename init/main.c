@@ -81,6 +81,7 @@
 #include <linux/integrity.h>
 #include <linux/proc_ns.h>
 #include <linux/io.h>
+#include <linux/kaiser.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -88,13 +89,34 @@
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
 
+#ifdef CONFIG_SEC_EXT
+#include <linux/sec_ext.h>
+#endif
+
+#ifdef CONFIG_UH
+#include <../drivers/uh/uh_reserve_mem.h>
+#include <linux/uh.h>
+#endif
+#ifdef CONFIG_UH_RKP
+#include <linux/rkp.h>
+#endif
+#if defined(CONFIG_RELOCATABLE_KERNEL) || defined(CONFIG_RELOCATABLE)
+#include <linux/memblock.h>
+#endif
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
 extern void fork_init(void);
 extern void radix_tree_init(void);
-#ifndef CONFIG_DEBUG_RODATA
-static inline void mark_rodata_ro(void) { }
+
+#ifdef CONFIG_KNOX_KAP
+int boot_mode_security;
+EXPORT_SYMBOL(boot_mode_security);
+#endif
+
+#ifdef CONFIG_UH_RKP
+extern struct vm_struct *vmlist;
 #endif
 
 /*
@@ -157,6 +179,27 @@ static int __init set_reset_devices(char *str)
 }
 
 __setup("reset_devices", set_reset_devices);
+#if defined(CONFIG_RELOCATABLE_KERNEL) || defined(CONFIG_RELOCATABLE)
+static unsigned long kaslr_mem  __initdata;
+static unsigned long kaslr_size  __initdata;
+
+static int __init set_kaslr_region(char *str){
+	char *endp;
+
+	kaslr_size = memparse(str, &endp);
+	if( *endp == '@')
+	  kaslr_mem = memparse(endp+1, NULL);
+
+	if (memblock_reserve(kaslr_mem, kaslr_size)) {
+			pr_err("%s: failed reserving size %lx " \
+						"at base 0x%lx\n", __func__, kaslr_size, kaslr_mem);
+			return -1;
+	}
+	pr_info("kaslr :%s, base:%lx, size:%lx \n", __func__, kaslr_mem, kaslr_size);
+	return 0;
+}
+__setup("kaslr_region=", set_kaslr_region);
+#endif
 
 static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
@@ -183,13 +226,21 @@ static int __init obsolete_checksetup(char *line)
 			} else if (!p->setup_func) {
 				pr_warn("Parameter %s is obsolete, ignored\n",
 					p->str);
-				return 1;
-			} else if (p->setup_func(line + n))
-				return 1;
+				had_early_param = 1;
+				goto fail;
+			} else {
+				set_memsize_reserved_name(p->str);
+				if (p->setup_func(line + n)) {
+					had_early_param = 1;
+					goto fail;
+				}
+			}
 		}
 		p++;
 	} while (p < __setup_end);
 
+fail:
+	unset_memsize_reserved_name();
 	return had_early_param;
 }
 
@@ -423,11 +474,22 @@ static int __init do_early_param(char *param, char *val,
 		    (strcmp(param, "console") == 0 &&
 		     strcmp(p->str, "earlycon") == 0)
 		) {
+			set_memsize_reserved_name(p->str);
 			if (p->setup_func(val) != 0)
 				pr_warn("Malformed early option '%s'\n", param);
 		}
 	}
 	/* We accept everything at this stage. */
+#ifdef CONFIG_KNOX_KAP
+	if ((strncmp(param, "androidboot.security_mode", 26) == 0)) {
+		pr_warn("val = %d\n",*val);
+	        if ((strncmp(val, "1526595585", 10) == 0)) {
+				pr_info("Security Boot Mode \n");
+				boot_mode_security = 1;
+			}
+	}
+#endif
+	unset_memsize_reserved_name();
 	return 0;
 }
 
@@ -471,7 +533,7 @@ void __init __weak smp_setup_processor_id(void)
 }
 
 # if THREAD_SIZE >= PAGE_SIZE
-void __init __weak thread_info_cache_init(void)
+void __init __weak thread_stack_cache_init(void)
 {
 }
 #endif
@@ -481,6 +543,7 @@ void __init __weak thread_info_cache_init(void)
  */
 static void __init mm_init(void)
 {
+	set_memsize_kernel_type(MEMSIZE_KERNEL_MM_INIT);
 	/*
 	 * page_ext requires contiguous pages,
 	 * bigger than MAX_ORDER unless SPARSEMEM.
@@ -492,13 +555,60 @@ static void __init mm_init(void)
 	pgtable_init();
 	vmalloc_init();
 	ioremap_huge_init();
+	kaiser_init();
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 }
+
+#ifdef CONFIG_UH_RKP
+//For 6G RAM.
+__attribute__((section(".rkp.bitmap"))) u8 rkp_pgt_bitmap_arr[0x30000] = {0};
+__attribute__((section(".rkp.dblmap"))) u8 rkp_map_bitmap_arr[0x30000] = {0};
+
+u8 rkp_started = 0;
+static void __init rkp_init(void)
+{
+	struct vm_struct *p;
+	rkp_init_t init;
+
+	init.magic = RKP_INIT_MAGIC;
+	init.vmalloc_start = VMALLOC_START;
+	init.vmalloc_end = (u64)high_memory;
+	init.init_mm_pgd = (u64)__pa(swapper_pg_dir);
+	init.id_map_pgd = (u64)__pa(idmap_pg_dir);
+	init.rkp_pgt_bitmap = (u64)__pa(rkp_pgt_bitmap);
+	init.rkp_map_bitmap = (u64)__pa(rkp_map_bitmap);
+	init.rkp_pgt_bitmap_size = RKP_PGT_BITMAP_LEN;
+	init.zero_pg_addr = __pa(empty_zero_page);
+	init._text = (u64) _text;
+	init._etext = (u64) _etext;
+	init.fimc_verify = 0;
+	init.fimc_phys_addr = 0;
+	
+	for (p = vmlist; p != NULL; p = p->next) {
+		if (p->addr == (void *)FIMC_LIB_START_VA) {
+			init.fimc_phys_addr = (u64)(p->phys_addr);
+			break;
+		}
+	}
+
+	init.extra_memory_addr = RKP_EXTRA_MEM_START;
+	init.extra_memory_size = RKP_EXTRA_MEM_SIZE;
+	init._srodata = (u64) __start_rodata;
+	init._erodata =(u64) __end_rodata;
+	init.large_memory = 0;
+	uh_call(UH_APP_RKP, RKP_START, (u64)&init, (u64)kimage_voffset, 0, 0);
+
+	rkp_started = 1;
+	return;
+}
+#endif
 
 asmlinkage __visible void __init start_kernel(void)
 {
 	char *command_line;
 	char *after_dashes;
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_OTHERS);
 	/*
 	 * Need to run as early as possible, to initialize the
 	 * lockdep hash:
@@ -541,6 +651,13 @@ asmlinkage __visible void __init start_kernel(void)
 				  static_command_line, __start___param,
 				  __stop___param - __start___param,
 				  -1, -1, NULL, &unknown_bootoption);
+#ifdef CONFIG_UH
+#ifdef CONFIG_KNOX_KAP
+	if (boot_mode_security)
+#endif
+		uh_reserve_mem();
+#endif
+
 	if (!IS_ERR_OR_NULL(after_dashes))
 		parse_args("Setting init args", after_dashes, NULL, 0, -1, -1,
 			   NULL, set_init_arg);
@@ -557,7 +674,32 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	mm_init();
+#ifdef CONFIG_UH
+#ifdef CONFIG_KNOX_KAP
+	if (boot_mode_security)
+		uh_init();
+	else
+		uh_disable();
+#else
+	uh_init();
+#endif
 
+#ifdef CONFIG_UH_RKP
+#ifdef CONFIG_KNOX_KAP
+	if (boot_mode_security)
+#endif
+		rkp_init();
+
+#if !defined(CONFIG_USE_SIGNED_BINARY) && !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+//	uh_call(UH_APP_RKP, RKP_NOSHIP, 0, 0, 0, 0);
+#endif
+/* Is it needed?
+#ifdef CONFIG_UH_RKP_DEBUG
+	uh_call(UH_APP_RKP, RKP_DEBUG, 0, 0, 0, 0);
+#endif
+*/
+#endif /* CONFIG_UH_RKP */
+#endif /* CONFIG_UH */
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
 	 * timer interrupt). Full topology setup happens at smp_init()
@@ -648,7 +790,7 @@ asmlinkage __visible void __init start_kernel(void)
 	/* Should be run before the first non-init thread is created */
 	init_espfix_bsp();
 #endif
-	thread_info_cache_init();
+	thread_stack_cache_init();
 	cred_init();
 	fork_init();
 	proc_caches_init();
@@ -679,6 +821,7 @@ asmlinkage __visible void __init start_kernel(void)
 
 	ftrace_init();
 
+	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
 	/* Do the rest non-__init'ed, we're now alive */
 	rest_init();
 }
@@ -776,6 +919,11 @@ static int __init_or_module do_one_initcall_debug(initcall_t fn)
 	printk(KERN_DEBUG "initcall %pF returned %d after %lld usecs\n",
 		 fn, ret, duration);
 
+#ifdef CONFIG_SEC_INITCALL_DEBUG
+	if (SEC_INITCALL_DEBUG_MIN_TIME < duration)
+		sec_initcall_debug_add(fn, duration);
+#endif
+
 	return ret;
 }
 
@@ -788,10 +936,14 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	if (initcall_blacklisted(fn))
 		return -EPERM;
 
+#ifdef CONFIG_SEC_INITCALL_DEBUG
+	ret = do_one_initcall_debug(fn);
+#else
 	if (initcall_debug)
 		ret = do_one_initcall_debug(fn);
 	else
 		ret = fn();
+#endif
 
 	msgbuf[0] = 0;
 
@@ -857,6 +1009,10 @@ static void __init do_initcall_level(int level)
 
 	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
 		do_one_initcall(*fn);
+
+#ifdef CONFIG_SEC_BOOTSTAT
+	sec_bootstat_add_initcall(initcall_level_names[level]);
+#endif
 }
 
 static void __init do_initcalls(void)
@@ -927,17 +1083,52 @@ static int try_to_run_init_process(const char *init_filename)
 	return ret;
 }
 
+#ifdef CONFIG_SEC_GPIO_DVS
+extern void gpio_dvs_check_initgpio(void);
+#endif
+
 static noinline void __init kernel_init_freeable(void);
+
+#ifdef CONFIG_DEBUG_RODATA
+static bool rodata_enabled = true;
+static int __init set_debug_rodata(char *str)
+{
+	return strtobool(str, &rodata_enabled);
+}
+__setup("rodata=", set_debug_rodata);
+
+static void mark_readonly(void)
+{
+	if (rodata_enabled)
+		mark_rodata_ro();
+	else
+		pr_info("Kernel memory protection disabled.\n");
+}
+#else
+static inline void mark_readonly(void)
+{
+	pr_warn("This architecture does not have kernel memory protection.\n");
+}
+#endif
 
 static int __ref kernel_init(void *unused)
 {
 	int ret;
 
 	kernel_init_freeable();
+#ifdef CONFIG_SEC_GPIO_DVS
+	/************************ Caution !!! ****************************/
+	/* This function must be located in appropriate INIT position
+	 * in accordance with the specification of each BB vendor.
+	 */
+	/************************ Caution !!! ****************************/
+	pr_info("%s: GPIO DVS: check init gpio\n", __func__);
+	gpio_dvs_check_initgpio();
+#endif
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
 	free_initmem();
-	mark_rodata_ro();
+	mark_readonly();
 	system_state = SYSTEM_RUNNING;
 	numa_default_policy();
 

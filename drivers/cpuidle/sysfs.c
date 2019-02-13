@@ -115,12 +115,37 @@ static ssize_t store_current_governor(struct device *dev,
 		return count;
 }
 
+#ifdef CONFIG_SEC_PM
+static ssize_t store_kick_all_cpus(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	int ret;
+	bool enable;
+
+	ret = strtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	if (enable)
+		kick_all_cpus_sync();
+
+	return count;
+}
+#endif /* CONFIG_SEC_PM */
+
 static DEVICE_ATTR(current_driver, 0444, show_current_driver, NULL);
 static DEVICE_ATTR(current_governor_ro, 0444, show_current_governor, NULL);
+#ifdef CONFIG_SEC_PM
+static DEVICE_ATTR(kick_all_cpus, 0220, NULL, store_kick_all_cpus);
+#endif
 
 static struct attribute *cpuidle_default_attrs[] = {
 	&dev_attr_current_driver.attr,
 	&dev_attr_current_governor_ro.attr,
+#ifdef CONFIG_SEC_PM
+	&dev_attr_kick_all_cpus.attr,
+#endif
 	NULL
 };
 
@@ -612,6 +637,18 @@ int cpuidle_add_sysfs(struct cpuidle_device *dev)
 	struct cpuidle_device_kobj *kdev;
 	struct device *cpu_dev = get_cpu_device((unsigned long)dev->cpu);
 	int error;
+
+	/*
+	 * Return if cpu_device is not setup for this CPU.
+	 *
+	 * This could happen if the arch did not set up cpu_device
+	 * since this CPU is not in cpu_present mask and the
+	 * driver did not send a correct CPU mask during registration.
+	 * Without this check we would end up passing bogus
+	 * value for &cpu_dev->kobj in kobject_init_and_add()
+	 */
+	if (!cpu_dev)
+		return -ENODEV;
 
 	kdev = kzalloc(sizeof(*kdev), GFP_KERNEL);
 	if (!kdev)

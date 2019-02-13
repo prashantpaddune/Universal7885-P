@@ -389,6 +389,7 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 {
 	struct bio *bio = sdio->bio;
 	unsigned long flags;
+	struct inode *inode;
 
 	bio->bi_private = dio;
 
@@ -400,6 +401,13 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 		bio_set_pages_dirty(bio);
 
 	dio->bio_bdev = bio->bi_bdev;
+	bio->bi_dio_inode = dio->inode;
+	inode = dio->inode;
+
+	bio->private_enc_mode = inode->i_mapping->private_enc_mode;
+	bio->private_algo_mode = inode->i_mapping->private_algo_mode;
+	bio->key = inode->i_mapping->key;
+	bio->key_length = inode->i_mapping->key_length;
 
 	if (sdio->submit_io) {
 		sdio->submit_io(dio->rw, bio, dio->inode,
@@ -575,7 +583,7 @@ static int dio_set_defer_completion(struct dio *dio)
 /*
  * Call into the fs to map some more disk blocks.  We record the current number
  * of available blocks at sdio->blocks_available.  These are in units of the
- * fs blocksize, (1 << inode->i_blkbits).
+ * fs blocksize, i_blocksize(inode).
  *
  * The fs is allowed to map lots of blocks at once.  If it wants to do that,
  * it uses the passed inode-relative block number as the file offset, as usual.
@@ -823,7 +831,8 @@ out:
 	 */
 	if (sdio->boundary) {
 		ret = dio_send_cur_page(dio, sdio, map_bh);
-		dio_bio_submit(dio, sdio);
+		if (sdio->bio)
+			dio_bio_submit(dio, sdio);
 		page_cache_release(sdio->cur_page);
 		sdio->cur_page = NULL;
 	}

@@ -124,7 +124,7 @@ static int journal_submit_commit_record(journal_t *journal,
 	struct commit_header *tmp;
 	struct buffer_head *bh;
 	int ret;
-	struct timespec now = current_kernel_time();
+	struct timespec64 now = current_kernel_time64();
 
 	*cbh = NULL;
 
@@ -154,6 +154,11 @@ static int journal_submit_commit_record(journal_t *journal,
 	clear_buffer_dirty(bh);
 	set_buffer_uptodate(bh);
 	bh->b_end_io = journal_end_buffer_io_sync;
+
+#ifdef CONFIG_JOURNAL_DATA_TAG
+	if (journal->j_flags & JBD2_JOURNAL_TAG)
+		set_buffer_journal(bh);
+#endif
 
 	if (journal->j_flags & JBD2_BARRIER &&
 	    !jbd2_has_feature_async_commit(journal))
@@ -737,6 +742,10 @@ start_journal_io:
 				clear_buffer_dirty(bh);
 				set_buffer_uptodate(bh);
 				bh->b_end_io = journal_end_buffer_io_sync;
+#ifdef CONFIG_JOURNAL_DATA_TAG
+				if (journal->j_flags & JBD2_JOURNAL_TAG)
+					set_buffer_journal(bh);
+#endif
 				submit_bh(WRITE_SYNC, bh);
 			}
 			cond_resched();

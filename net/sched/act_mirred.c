@@ -36,14 +36,15 @@ static DEFINE_SPINLOCK(mirred_list_lock);
 static void tcf_mirred_release(struct tc_action *a, int bind)
 {
 	struct tcf_mirred *m = to_mirred(a);
-	struct net_device *dev = rcu_dereference_protected(m->tcfm_dev, 1);
+	struct net_device *dev;
 
 	/* We could be called either in a RCU callback or with RTNL lock held. */
 	spin_lock_bh(&mirred_list_lock);
 	list_del(&m->tcfm_list);
-	spin_unlock_bh(&mirred_list_lock);
+	dev = rcu_dereference_protected(m->tcfm_dev, 1);
 	if (dev)
 		dev_put(dev);
+	spin_unlock_bh(&mirred_list_lock);
 }
 
 static const struct nla_policy mirred_policy[TCA_MIRRED_MAX + 1] = {
@@ -71,6 +72,7 @@ static int tcf_mirred_init(struct net *net, struct nlattr *nla,
 	switch (parm->eaction) {
 	case TCA_EGRESS_MIRROR:
 	case TCA_EGRESS_REDIR:
+	case TCA_INGRESS_REDIR:
 		break;
 	default:
 		return -EINVAL;
@@ -163,24 +165,38 @@ static int tcf_mirred(struct sk_buff *skb, const struct tc_action *a,
 		goto out;
 	}
 
-	at = G_TC_AT(skb->tc_verd);
 	skb2 = skb_clone(skb, GFP_ATOMIC);
 	if (!skb2)
 		goto out;
 
-	if (!(at & AT_EGRESS)) {
-		if (m->tcfm_ok_push)
-			skb_push(skb2, skb->mac_len);
+	if (m->tcfm_eaction == TCA_INGRESS_REDIR) {
+		/* Let's _hope_ the devices are of similar type.
+		 * This is rather dangerous; with changed skb_iif, we
+		 * will not know the real input device, but perhaps
+		 * that's the whole point of doing the ingress
+		 * redirect/mirror in the first place?  (Note: This
+		 * can lead to bad things if two devices ingress
+		 * redirect at each other. Don't do that.)*/
+		skb2->dev = dev;
+		skb2->skb_iif = skb2->dev->ifindex;
+		skb2->pkt_type = PACKET_HOST;
+		netif_rx(skb2);
+	} else {
+		at = G_TC_AT(skb->tc_verd);
+		if (!(at & AT_EGRESS)) {
+			if (m->tcfm_ok_push)
+				skb_push_rcsum(skb2, skb->mac_len);
+		}
+
+		/* mirror is always swallowed */
+		if (m->tcfm_eaction != TCA_EGRESS_MIRROR)
+			skb2->tc_verd = SET_TC_FROM(skb2->tc_verd, at);
+
+		skb2->skb_iif = skb->dev->ifindex;
+		skb2->dev = dev;
+		skb_sender_cpu_clear(skb2);
+		err = dev_queue_xmit(skb2);
 	}
-
-	/* mirror is always swallowed */
-	if (m->tcfm_eaction != TCA_EGRESS_MIRROR)
-		skb2->tc_verd = SET_TC_FROM(skb2->tc_verd, at);
-
-	skb2->skb_iif = skb->dev->ifindex;
-	skb2->dev = dev;
-	skb_sender_cpu_clear(skb2);
-	err = dev_queue_xmit(skb2);
 
 	if (err) {
 out:

@@ -43,6 +43,9 @@
 #endif
 #include <net/ip_fib.h>
 
+#ifdef CONFIG_MPTCP
+	#include <net/mptcp.h>
+#endif
 #include <linux/errqueue.h>
 #include <asm/uaccess.h>
 
@@ -98,15 +101,17 @@ static void ip_cmsg_recv_retopts(struct msghdr *msg, struct sk_buff *skb)
 }
 
 static void ip_cmsg_recv_checksum(struct msghdr *msg, struct sk_buff *skb,
-				  int offset)
+				  int tlen, int offset)
 {
 	__wsum csum = skb->csum;
 
 	if (skb->ip_summed != CHECKSUM_COMPLETE)
 		return;
 
-	if (offset != 0)
-		csum = csum_sub(csum, csum_partial(skb->data, offset, 0));
+	if (offset != 0) {
+		int tend_off = skb_transport_offset(skb) + tlen;
+		csum = csum_sub(csum, skb_checksum(skb, tend_off, offset, 0));
+	}
 
 	put_cmsg(msg, SOL_IP, IP_CHECKSUM, sizeof(__wsum), &csum);
 }
@@ -152,7 +157,7 @@ static void ip_cmsg_recv_dstaddr(struct msghdr *msg, struct sk_buff *skb)
 }
 
 void ip_cmsg_recv_offset(struct msghdr *msg, struct sk_buff *skb,
-			 int offset)
+			 int tlen, int offset)
 {
 	struct inet_sock *inet = inet_sk(skb->sk);
 	unsigned int flags = inet->cmsg_flags;
@@ -215,7 +220,7 @@ void ip_cmsg_recv_offset(struct msghdr *msg, struct sk_buff *skb,
 	}
 
 	if (flags & IP_CMSG_CHECKSUM)
-		ip_cmsg_recv_checksum(msg, skb, offset);
+		ip_cmsg_recv_checksum(msg, skb, tlen, offset);
 }
 EXPORT_SYMBOL(ip_cmsg_recv_offset);
 
@@ -721,6 +726,19 @@ static int do_ip_setsockopt(struct sock *sk, int level,
 			inet->tos = val;
 			sk->sk_priority = rt_tos2priority(val);
 			sk_dst_reset(sk);
+#ifdef CONFIG_MPTCP
+			/* Update TOS on mptcp subflow */
+			if (is_meta_sk(sk)) {
+				struct sock *sk_it;
+				mptcp_for_each_sk(tcp_sk(sk)->mpcb, sk_it) {
+					if (inet_sk(sk_it)->tos != inet_sk(sk)->tos) {
+						inet_sk(sk_it)->tos = inet_sk(sk)->tos;
+						sk_it->sk_priority = sk->sk_priority;
+						sk_dst_reset(sk_it);
+					}
+				}
+			}
+#endif
 		}
 		break;
 	case IP_TTL:
@@ -806,6 +824,7 @@ static int do_ip_setsockopt(struct sock *sk, int level,
 	{
 		struct ip_mreqn mreq;
 		struct net_device *dev = NULL;
+		int midx;
 
 		if (sk->sk_type == SOCK_STREAM)
 			goto e_inval;
@@ -850,11 +869,15 @@ static int do_ip_setsockopt(struct sock *sk, int level,
 		err = -EADDRNOTAVAIL;
 		if (!dev)
 			break;
+
+		midx = l3mdev_master_ifindex(dev);
+
 		dev_put(dev);
 
 		err = -EINVAL;
 		if (sk->sk_bound_dev_if &&
-		    mreq.imr_ifindex != sk->sk_bound_dev_if)
+		    mreq.imr_ifindex != sk->sk_bound_dev_if &&
+		    (!midx || midx != sk->sk_bound_dev_if))
 			break;
 
 		inet->mc_index = mreq.imr_ifindex;
@@ -1190,7 +1213,14 @@ void ipv4_pktinfo_prepare(const struct sock *sk, struct sk_buff *skb)
 		pktinfo->ipi_ifindex = 0;
 		pktinfo->ipi_spec_dst.s_addr = 0;
 	}
-	skb_dst_drop(skb);
+	/* We need to keep the dst for __ip_options_echo()
+	 * We could restrict the test to opt.ts_needtime || opt.srr,
+	 * but the following is good enough as IP options are not often used.
+	 */
+	if (unlikely(IPCB(skb)->opt.optlen))
+		skb_dst_force(skb);
+	else
+		skb_dst_drop(skb);
 }
 
 int ip_setsockopt(struct sock *sk, int level,

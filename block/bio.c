@@ -373,10 +373,14 @@ static void punt_bios_to_rescuer(struct bio_set *bs)
 	bio_list_init(&punt);
 	bio_list_init(&nopunt);
 
-	while ((bio = bio_list_pop(current->bio_list)))
+	while ((bio = bio_list_pop(&current->bio_list[0])))
 		bio_list_add(bio->bi_pool == bs ? &punt : &nopunt, bio);
+	current->bio_list[0] = nopunt;
 
-	*current->bio_list = nopunt;
+	bio_list_init(&nopunt);
+	while ((bio = bio_list_pop(&current->bio_list[1])))
+		bio_list_add(bio->bi_pool == bs ? &punt : &nopunt, bio);
+	current->bio_list[1] = nopunt;
 
 	spin_lock(&bs->rescue_lock);
 	bio_list_merge(&bs->rescue_list, &punt);
@@ -464,7 +468,9 @@ struct bio *bio_alloc_bioset(gfp_t gfp_mask, int nr_iovecs, struct bio_set *bs)
 		 * we retry with the original gfp_flags.
 		 */
 
-		if (current->bio_list && !bio_list_empty(current->bio_list))
+		if (current->bio_list &&
+		    (!bio_list_empty(&current->bio_list[0]) ||
+		     !bio_list_empty(&current->bio_list[1])))
 			gfp_mask &= ~__GFP_DIRECT_RECLAIM;
 
 		p = mempool_alloc(bs->bio_pool, gfp_mask);
@@ -584,6 +590,16 @@ void __bio_clone_fast(struct bio *bio, struct bio *bio_src)
 	bio->bi_rw = bio_src->bi_rw;
 	bio->bi_iter = bio_src->bi_iter;
 	bio->bi_io_vec = bio_src->bi_io_vec;
+	bio->bi_dio_inode = bio_src->bi_dio_inode;
+	bio->private_enc_mode = bio_src->private_enc_mode;
+	bio->private_algo_mode = bio_src->private_algo_mode;
+	bio->key = bio_src->key;
+	bio->key_length = bio_src->key_length;
+	bio_clone_blkcg_association(bio, bio_src);
+#ifdef CONFIG_JOURNAL_DATA_TAG
+	bio->bi_flags |= bio_src->bi_flags & BIO_JOURNAL_TAG_MASK;
+#endif
+	bio->bi_flags |= bio_src->bi_flags & 1UL << BIO_BYPASS;
 }
 EXPORT_SYMBOL(__bio_clone_fast);
 
@@ -666,6 +682,15 @@ struct bio *bio_clone_bioset(struct bio *bio_src, gfp_t gfp_mask,
 	bio->bi_rw		= bio_src->bi_rw;
 	bio->bi_iter.bi_sector	= bio_src->bi_iter.bi_sector;
 	bio->bi_iter.bi_size	= bio_src->bi_iter.bi_size;
+	bio->bi_dio_inode	= bio_src->bi_dio_inode;
+	bio->private_enc_mode	= bio_src->private_enc_mode;
+	bio->private_algo_mode	= bio_src->private_algo_mode;
+	bio->key		= bio_src->key;
+	bio->key_length		= bio_src->key_length;
+#ifdef CONFIG_JOURNAL_DATA_TAG
+	bio->bi_flags |= bio_src->bi_flags & BIO_JOURNAL_TAG_MASK;
+#endif
+	bio->bi_flags |= bio_src->bi_flags & 1UL << BIO_BYPASS;
 
 	if (bio->bi_rw & REQ_DISCARD)
 		goto integrity_clone;
@@ -688,6 +713,8 @@ integrity_clone:
 			return NULL;
 		}
 	}
+
+	bio_clone_blkcg_association(bio, bio_src);
 
 	return bio;
 }
@@ -1258,6 +1285,7 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 	int ret, offset;
 	struct iov_iter i;
 	struct iovec iov;
+	struct bio_vec *bvec;
 
 	iov_for_each(iov, i, *iter) {
 		unsigned long uaddr = (unsigned long) iov.iov_base;
@@ -1302,7 +1330,12 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 		ret = get_user_pages_fast(uaddr, local_nr_pages,
 				(iter->type & WRITE) != WRITE,
 				&pages[cur_page]);
-		if (ret < local_nr_pages) {
+		if (unlikely(ret < local_nr_pages)) {
+			for (j = cur_page; j < page_limit; j++) {
+				if (!pages[j])
+					break;
+				put_page(pages[j]);
+			}
 			ret = -EFAULT;
 			goto out_unmap;
 		}
@@ -1310,6 +1343,7 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 		offset = uaddr & ~PAGE_MASK;
 		for (j = cur_page; j < page_limit; j++) {
 			unsigned int bytes = PAGE_SIZE - offset;
+			unsigned short prev_bi_vcnt = bio->bi_vcnt;
 
 			if (len <= 0)
 				break;
@@ -1323,6 +1357,13 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 			if (bio_add_pc_page(q, bio, pages[j], bytes, offset) <
 					    bytes)
 				break;
+
+			/*
+			 * check if vector was merged with previous
+			 * drop page reference if needed
+			 */
+			if (bio->bi_vcnt == prev_bi_vcnt)
+				put_page(pages[j]);
 
 			len -= bytes;
 			offset = 0;
@@ -1356,10 +1397,8 @@ struct bio *bio_map_user_iov(struct request_queue *q,
 	return bio;
 
  out_unmap:
-	for (j = 0; j < nr_pages; j++) {
-		if (!pages[j])
-			break;
-		page_cache_release(pages[j]);
+	bio_for_each_segment_all(bvec, bio, j) {
+		put_page(bvec->bv_page);
 	}
  out:
 	kfree(pages);
@@ -2012,6 +2051,17 @@ void bio_disassociate_task(struct bio *bio)
 		css_put(bio->bi_css);
 		bio->bi_css = NULL;
 	}
+}
+
+/**
+ * bio_clone_blkcg_association - clone blkcg association from src to dst bio
+ * @dst: destination bio
+ * @src: source bio
+ */
+void bio_clone_blkcg_association(struct bio *dst, struct bio *src)
+{
+	if (src->bi_css)
+		WARN_ON(bio_associate_blkcg(dst, src->bi_css));
 }
 
 #endif /* CONFIG_BLK_CGROUP */
