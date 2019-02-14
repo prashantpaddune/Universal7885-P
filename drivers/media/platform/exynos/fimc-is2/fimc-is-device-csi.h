@@ -50,10 +50,8 @@ enum fimc_is_csi_state {
 /* MIPI-CSI interface */
 enum itf_vc_buf_data_type {
 	VC_BUF_DATA_TYPE_INVALID = -1,
-	VC_BUF_DATA_TYPE_SENSOR_STAT1 = 0,
-	VC_BUF_DATA_TYPE_GENERAL_STAT1,
-	VC_BUF_DATA_TYPE_SENSOR_STAT2,
-	VC_BUF_DATA_TYPE_GENERAL_STAT2,
+	VC_BUF_DATA_TYPE_PDAF = 0,
+	VC_BUF_DATA_TYPE_MIPI_STAT,
 	VC_BUF_DATA_TYPE_MAX
 };
 
@@ -144,7 +142,6 @@ struct fimc_is_device_csi_dma {
 	atomic_t			rcount; /* CSI open count check */
 
 	spinlock_t			barrier;
-	bool				use_split;
 };
 
 int __must_check fimc_is_csi_dma_probe(struct fimc_is_device_csi_dma *csi_dma, struct platform_device *pdev);

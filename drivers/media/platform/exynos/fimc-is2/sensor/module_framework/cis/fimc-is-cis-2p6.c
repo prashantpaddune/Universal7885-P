@@ -58,7 +58,6 @@ static const struct sensor_pll_info_compact **sensor_2p6_pllinfos;
 static const struct sensor_pll_info **sensor_2p6_pllinfos;
 #endif
 
-#ifdef USE_AP_PDAF
 /* variables of pdaf setting */
 static const u32 *sensor_2p6_pdaf_global;
 static u32 sensor_2p6_pdaf_global_size;
@@ -69,7 +68,6 @@ static u32 sensor_2p6_pdaf_max_setfile_num;
 static const struct sensor_pll_info_compact **sensor_2p6_pdaf_pllinfos;
 #else
 static const struct sensor_pll_info **sensor_2p6_pdaf_pllinfos;
-#endif
 #endif
 
 #ifdef S5K2P6_USE_COMPACT_PLL_INFO
@@ -288,12 +286,9 @@ int sensor_2p6_cis_init(struct v4l2_subdev *subdev)
 	cis->cis_data->low_expo_start = 33000;
 	cis->need_mode_change = false;
 
-#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		sensor_2p6_cis_data_calculation(sensor_2p6_pdaf_pllinfos[setfile_index], cis->cis_data);
-	} else
-#endif
-	{
+	} else {
 		sensor_2p6_cis_data_calculation(sensor_2p6_pllinfos[setfile_index], cis->cis_data);
 	}
 
@@ -359,12 +354,9 @@ int sensor_2p6_cis_log_status(struct v4l2_subdev *subdev)
 	ret = fimc_is_sensor_read8(client, 0x0100, &data8);
 	if (unlikely(!ret)) printk("[SEN:DUMP] mode_select(%x)\n", data8);
 
-#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		sensor_cis_dump_registers(subdev, sensor_2p6_pdaf_setfiles[0], sensor_2p6_pdaf_setfile_sizes[0]);
-	} else
-#endif
-	{
+	} else {
 		sensor_cis_dump_registers(subdev, sensor_2p6_setfiles[0], sensor_2p6_setfile_sizes[0]);
 	}
 
@@ -458,12 +450,9 @@ int sensor_2p6_cis_set_global_setting(struct v4l2_subdev *subdev)
 	usleep_range(3000, 3000);
 
 	/* setfile global setting is at camera entrance */
-#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		ret = sensor_cis_set_registers(subdev, sensor_2p6_pdaf_global, sensor_2p6_pdaf_global_size);
-	} else
-#endif
-	{
+	} else {
 		ret = sensor_cis_set_registers(subdev, sensor_2p6_global, sensor_2p6_global_size);
 	}
 
@@ -490,12 +479,9 @@ int sensor_2p6_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	BUG_ON(!cis);
 	BUG_ON(!cis->cis_data);
 
-#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		max_setfile_num = sensor_2p6_pdaf_max_setfile_num;
-	} else
-#endif
-	{
+	} else {
 		max_setfile_num = sensor_2p6_max_setfile_num;
 	}
 
@@ -516,36 +502,31 @@ int sensor_2p6_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	}
 
 	/* In case of fastAE or high speed fps, forced to set pdaf off */
-#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		if (mode <= SENSOR_2P6_MODE_2304X1120_30) {
-			cis->cis_data->is_data.paf_stat_enable = true;
+			cis->cis_data->companion_data.paf_stat_enable = true;
 		} else {
-			cis->cis_data->is_data.paf_stat_enable = false;
+			cis->cis_data->companion_data.paf_stat_enable = false;
 		}
 		dbg_sensor(1, "[%s] mode(%d) paf_stat_enable(%d) \n",
-			__func__, mode, cis->cis_data->is_data.paf_stat_enable);
+			__func__, mode, cis->cis_data->companion_data.paf_stat_enable);
 	}
-#endif
 
 #if defined(USE_SENSOR_WDR)
 	/* In case of fastAE or high speed fps, forced to set wdr off */
 	if (mode <= SENSOR_2P6_MODE_4608X2240_30) {
-		cis->cis_data->is_data.wdr_enable = true;
+		cis->cis_data->companion_data.wdr_enable = true;
 	} else {
-		cis->cis_data->is_data.wdr_enable = false;
+		cis->cis_data->companion_data.wdr_enable = false;
 	}
 	dbg_sensor(1, "[%s] mode(%d) wdr_enable(%d) \n",
-		__func__, mode, cis->cis_data->is_data.wdr_enable);
+		__func__, mode, cis->cis_data->companion_data.wdr_enable);
 #endif
 
-#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 		sensor_2p6_cis_data_calculation(sensor_2p6_pdaf_pllinfos[mode], cis->cis_data);
 		ret = sensor_cis_set_registers(subdev, sensor_2p6_pdaf_setfiles[mode], sensor_2p6_pdaf_setfile_sizes[mode]);
-	} else
-#endif
-	{
+	} else {
 		sensor_2p6_cis_data_calculation(sensor_2p6_pllinfos[mode], cis->cis_data);
 		ret = sensor_cis_set_registers(subdev, sensor_2p6_setfiles[mode], sensor_2p6_setfile_sizes[mode]);
 	}
@@ -555,7 +536,6 @@ int sensor_2p6_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		goto p_err;
 	}
 
-#ifdef USE_AP_PDAF
 	if (cis->use_pdaf == true) {
 #if defined(S5K2P6_BPC_DISABLE)
 		/* BPC disable */
@@ -573,9 +553,9 @@ int sensor_2p6_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 #endif
 
 		/* pdaf tail mode off */
-		if (cis->cis_data->is_data.paf_stat_enable == false) {
+		if (cis->cis_data->companion_data.paf_stat_enable == false) {
 			info("[%s]: Set pdaf tail mode off (paf_stat_enable %d)\n",
-				__func__, cis->cis_data->is_data.paf_stat_enable);
+				__func__, cis->cis_data->companion_data.paf_stat_enable);
 
 			ret = fimc_is_sensor_write16(cis->client, 0x6028, 0x2000);
 			if (ret < 0) {
@@ -593,33 +573,10 @@ int sensor_2p6_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 				goto p_err;
 			}
 		}
-	} else
-#else /* USE_AP_PDAF */
-	{
-		/* pdaf tail mode off */
-		info("[%s]: Set pdaf tail mode off (paf_stat_enable %d)\n",
-			__func__, cis->cis_data->is_data.paf_stat_enable);
-
-		ret = fimc_is_sensor_write16(cis->client, 0x6028, 0x2000);
-		if (ret < 0) {
-			err("2p6 sensor write fail !!!");
-			goto p_err;
-		}
-		ret = fimc_is_sensor_write16(cis->client, 0x602A, 0x1BB0);
-		if (ret < 0) {
-			err("2p6 sensor write fail !!!");
-			goto p_err;
-		}
-		ret = fimc_is_sensor_write16(cis->client, 0x6F12, 0x0100);
-		if (ret < 0) {
-			err("2p6 sensor write fail !!!");
-			goto p_err;
-		}
 	}
-#endif
 
 #if defined(USE_SENSOR_WDR)
-	if (cis->cis_data->is_data.wdr_enable == false) {
+	if (cis->cis_data->companion_data.wdr_enable == false) {
 		info("[%s] S5K2P6_WDR_DISABLE\n", __func__);
 		ret = fimc_is_sensor_write16(cis->client, 0x6028, 0x4000);
 		if (ret < 0) {
@@ -1903,9 +1860,7 @@ int cis_2p6_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
 	int ret = 0;
-#ifdef USE_AP_PDAF
 	bool use_pdaf = false;
-#endif
 
 	struct fimc_is_core *core = NULL;
 	struct v4l2_subdev *subdev_cis = NULL;
@@ -1929,12 +1884,9 @@ int cis_2p6_probe(struct i2c_client *client,
 	dev = &client->dev;
 	dnode = dev->of_node;
 
-#ifdef USE_AP_PDAF
 	if (of_property_read_bool(dnode, "use_pdaf")) {
 		use_pdaf = true;
-		probe_info("2p6 use to pdaf mode");
 	}
-#endif
 
 	ret = of_property_read_u32(dnode, "id", &sensor_id);
 	if (ret) {
@@ -1999,13 +1951,11 @@ int cis_2p6_probe(struct i2c_client *client,
 	cis->use_dgain = true;
 	cis->hdr_ctrl_by_again = false;
 
-#ifdef USE_AP_PDAF
 	if (use_pdaf == true) {
 		cis->use_pdaf = true;
 	} else {
 		cis->use_pdaf = false;
 	}
-#endif
 
 	ret = of_property_read_string(dnode, "setfile", &setfile);
 	if (ret) {
@@ -2015,7 +1965,7 @@ int cis_2p6_probe(struct i2c_client *client,
 
 	if (strcmp(setfile, "default") == 0 ||
 			strcmp(setfile, "setA") == 0) {
-		probe_info("%s : setfile_A \n", __func__);
+		probe_info("%s : setfile_A for Non-PDAF\n", __func__);
 		sensor_2p6_global = sensor_2p6_setfile_A_Global;
 		sensor_2p6_global_size = sizeof(sensor_2p6_setfile_A_Global) / sizeof(sensor_2p6_setfile_A_Global[0]);
 		sensor_2p6_setfiles = sensor_2p6_setfiles_A;
@@ -2023,7 +1973,6 @@ int cis_2p6_probe(struct i2c_client *client,
 		sensor_2p6_max_setfile_num = sizeof(sensor_2p6_setfiles_A) / sizeof(sensor_2p6_setfiles_A[0]);
 		sensor_2p6_pllinfos = sensor_2p6_pllinfos_A;
 	} else if (strcmp(setfile, "setB") == 0) {
-#ifdef USE_AP_PDAF
 		probe_info("%s setfile_B for PDAF\n", __func__);
 		sensor_2p6_pdaf_global = sensor_2p6_setfile_B_Global;
 		sensor_2p6_pdaf_global_size = sizeof(sensor_2p6_setfile_B_Global) / sizeof(sensor_2p6_setfile_B_Global[0]);
@@ -2031,15 +1980,6 @@ int cis_2p6_probe(struct i2c_client *client,
 		sensor_2p6_pdaf_setfile_sizes = sensor_2p6_setfile_B_sizes;
 		sensor_2p6_pdaf_max_setfile_num = sizeof(sensor_2p6_setfiles_B) / sizeof(sensor_2p6_setfiles_B[0]);
 		sensor_2p6_pdaf_pllinfos = sensor_2p6_pllinfos_B;
-#else
-		probe_info("%s setfile_B\n", __func__);
-		sensor_2p6_global = sensor_2p6_setfile_B_Global;
-		sensor_2p6_global_size = sizeof(sensor_2p6_setfile_B_Global) / sizeof(sensor_2p6_setfile_B_Global[0]);
-		sensor_2p6_setfiles = sensor_2p6_setfiles_B;
-		sensor_2p6_setfile_sizes = sensor_2p6_setfile_B_sizes;
-		sensor_2p6_max_setfile_num = sizeof(sensor_2p6_setfiles_B) / sizeof(sensor_2p6_setfiles_B[0]);
-		sensor_2p6_pllinfos = sensor_2p6_pllinfos_B;
-#endif
 	} else {
 		err("%s setfile index out of bound, take default (setfile_A)", __func__);
 		sensor_2p6_global = sensor_2p6_setfile_A_Global;

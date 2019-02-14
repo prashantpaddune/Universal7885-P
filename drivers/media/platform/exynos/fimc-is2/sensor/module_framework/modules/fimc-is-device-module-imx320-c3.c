@@ -360,12 +360,12 @@ int sensor_module_imx320_c3_probe(struct platform_device *pdev)
 
 	for (vc_idx = 0; vc_idx < 2; vc_idx++) {
 		switch (vc_idx) {
-		case VC_BUF_DATA_TYPE_SENSOR_STAT1:
+		case VC_BUF_DATA_TYPE_PDAF:
 			module->vc_max_size[vc_idx].width = IMX320_PDAF_MAXWIDTH;
 			module->vc_max_size[vc_idx].height = IMX320_PDAF_MAXHEIGHT;
 			module->vc_max_size[vc_idx].element_size = IMX320_PDAF_ELEMENT;
 			break;
-		case VC_BUF_DATA_TYPE_GENERAL_STAT1:
+		case VC_BUF_DATA_TYPE_MIPI_STAT:
 			module->vc_max_size[vc_idx].width = IMX320_MIPI_MAXWIDTH;
 			module->vc_max_size[vc_idx].height = IMX320_MIPI_MAXHEIGHT;
 			module->vc_max_size[vc_idx].element_size = IMX320_MIPI_ELEMENT;

@@ -43,7 +43,6 @@ struct fimc_is_cis {
 	u32				aperture_num;
 	bool				use_dgain;
 	bool				hdr_ctrl_by_again;
-	bool				use_wb_gain;
 
 	struct fimc_is_sensor_ctl	sensor_ctls[CAM2P0_UCTL_LIST_SIZE];
 
@@ -58,7 +57,6 @@ struct fimc_is_cis {
 	u32				mode_chg_long_expo;
 	u32				mode_chg_long_again;
 	u32				mode_chg_long_dgain;
-	struct wb_gains			mode_chg_wb_gains;
 
 	/* expected dms */
 	camera2_lens_dm_t		expecting_lens_dm[EXPECT_DM_NUM];
@@ -67,7 +65,6 @@ struct fimc_is_cis {
 
 	/* expected udm */
 	camera2_lens_udm_t		expecting_lens_udm[EXPECT_DM_NUM];
-	camera2_sensor_udm_t		expecting_sensor_udm[EXPECT_DM_NUM];
 
 	/* For sensor status dump */
 	struct work_struct		cis_status_dump_work;
@@ -80,9 +77,7 @@ struct fimc_is_cis {
 	u32				max_fps;
 	struct mutex			*i2c_lock;
 	struct mutex			control_lock;
-#ifdef USE_AP_PDAF
 	bool				use_pdaf;
-#endif
 
 	/* Long Term Exposure Mode(LTE mode) structure */
 	struct fimc_is_long_term_expo_mode	long_term_mode;
@@ -90,22 +85,6 @@ struct fimc_is_cis {
 
 	/* sensor control delay(N+1 or N+2) */
 	u32				ctrl_delay;
-#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
-#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION_RUNTIME
-	struct work_struct				mipi_clock_change_work;
-#endif
-	u32				mipi_clock_index_new;
-	u32				mipi_clock_index_cur;
-#endif
-	u32				ae_exposure;
-	u32				ae_deltaev;
-
-#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
-	/* settings for initial AE */
-	bool				use_initial_ae;
-	ae_setting			init_ae_setting;
-	ae_setting			last_ae_setting;
-#endif
 };
 
 struct fimc_is_actuator_data {
@@ -155,18 +134,6 @@ struct fimc_is_actuator {
 	struct fimc_is_actuator_data		actuator_data;
 	struct fimc_is_device_sensor_peri	*sensor_peri;
 	struct mutex				*i2c_lock;
-};
-
-struct fimc_is_iris {
-	u32				id;
-	struct v4l2_subdev		*subdev; /* connected module subdevice */
-	u32				device; /* connected sensor device */
-	struct i2c_client		*client;
-	struct fimc_is_iris_ops		*iris_ops;
-	struct fimc_is_device_sensor_peri	*sensor_peri;
-	struct mutex				*i2c_lock;
-	int				new_value;
-	int				cur_value; /* need to mode when iris value change */
 };
 
 struct fimc_is_flash_data {
@@ -235,43 +202,6 @@ struct fimc_is_preprocessor {
 	struct mutex			*i2c_lock;
 };
 
-struct fimc_is_pdp {
-	u32				id;
-	u32 __iomem			*base_reg;
-	resource_size_t			regs_start;
-	resource_size_t			regs_end;
-	size_t				width;
-	size_t				height;
-	struct v4l2_subdev		*subdev; /* connected module subdevice */
-};
-
-struct fimc_is_paf {
-	u32				id;	/* 0: context0, 1: context1 */
-	u32 __iomem			*regs;
-	resource_size_t			regs_start;
-	resource_size_t			regs_end;
-	void __iomem			*regs_b;
-	resource_size_t			regs_b_start;
-	resource_size_t			regs_b_end;
-	int				irq;
-
-	/* 0: MSPD normal
-	   1: 2PD mode 1
-	   2: 2PD mode 2
-	   3: 2PD mode 3
-	   4: MSPD tail */
-	u32				sensor_mode;
-	size_t				in_width;
-	size_t				in_height;
-	size_t				pd_width;
-	size_t				pd_height;
-	u32				fro_cnt;
-
-	struct paf_setting_t		*regs_set;
-	struct fimc_is_paf_ops		*paf_ops;
-	struct v4l2_subdev		*subdev; /* connected module subdevice */
-};
-
 struct fimc_is_device_sensor_peri {
 	struct fimc_is_module_enum	*module;
 
@@ -290,19 +220,10 @@ struct fimc_is_device_sensor_peri {
 	struct fimc_is_ois		*ois;
 	struct v4l2_subdev		*subdev_ois;
 
-	struct fimc_is_pdp		*pdp;
-	struct v4l2_subdev		*subdev_pdp;
-
-	struct fimc_is_paf		*paf;
-	struct v4l2_subdev		*subdev_paf;
-
-	struct fimc_is_iris		*iris;
-	struct v4l2_subdev		*subdev_iris;
-
 	unsigned long			peri_state;
 
 	/* Thread for sensor and high spped recording setting */
-	bool					use_sensor_work;
+	u32				sensor_work_index;
 	spinlock_t			sensor_work_lock;
 	struct task_struct		*sensor_task;
 	struct kthread_worker		sensor_worker;
@@ -320,7 +241,6 @@ struct fimc_is_device_sensor_peri {
 #ifdef CONFIG_COMPANION_DIRECT_USE
 	struct fimc_is_preprocessor_interface	preprocessor_inferface;
 #endif
-	int						reuse_3a_value;
 };
 
 void fimc_is_sensor_work_fn(struct kthread_work *work);
@@ -376,8 +296,6 @@ int fimc_is_sensor_peri_s_analog_gain(struct fimc_is_device_sensor *device,
 				u32 long_analog_gain, u32 short_analog_gain);
 int fimc_is_sensor_peri_s_digital_gain(struct fimc_is_device_sensor *device,
 				u32 long_digital_gain, u32 short_digital_gain);
-int fimc_is_sensor_peri_s_wb_gains(struct fimc_is_device_sensor *device,
-				struct wb_gains wb_gains);
 int fimc_is_sensor_peri_adj_ctrl(struct fimc_is_device_sensor *device,
 				u32 input, struct v4l2_control *ctrl);
 
@@ -406,7 +324,5 @@ void fimc_is_sensor_peri_init_work(struct fimc_is_device_sensor_peri *sensor_per
 #define CALL_PREPROPOPS(s, op, args...) (((s)->preprocessor_ops->op) ? ((s)->preprocessor_ops->op(args)) : 0)
 #endif
 #define CALL_OISOPS(s, op, args...) (((s)->ois_ops->op) ? ((s)->ois_ops->op(args)) : 0)
-#define CALL_IRISOPS(s, op, args...) (((s)->iris_ops->op) ? ((s)->iris_ops->op(args)) : 0)
-#define CALL_PAFOPS(s, op, args...) (((s)->paf_ops->op) ? ((s)->paf_ops->op(args)) : 0)
 
 #endif

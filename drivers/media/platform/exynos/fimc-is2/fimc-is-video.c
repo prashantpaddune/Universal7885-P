@@ -622,7 +622,6 @@ static int fimc_is_queue_set_format_mplane(struct fimc_is_queue *queue,
 
 	queue->framecfg.format			= fmt;
 	queue->framecfg.colorspace		= pix->colorspace;
-	queue->framecfg.quantization            = pix->quantization;
 	queue->framecfg.width			= pix->width;
 	queue->framecfg.height			= pix->height;
 

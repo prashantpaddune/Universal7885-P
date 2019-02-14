@@ -315,7 +315,7 @@ static int fimc_is_hw_mcsc_open(struct fimc_is_hw_ip *hw_ip, u32 instance,
 	hardware = hw_ip->hardware;
 	get_mcsc_hw_ip(hardware, &hw_ip0, &hw_ip1);
 
-	for (i = 0; i < SENSOR_POSITION_MAX; i++) {
+	for (i = 0; i < SENSOR_POSITION_END; i++) {
 		hw_mcsc->applied_setfile[i] = NULL;
 	}
 
@@ -510,9 +510,11 @@ static int fimc_is_hw_mcsc_disable(struct fimc_is_hw_ip *hw_ip, u32 instance, ul
 			!atomic_read(&hw_ip->status.Vvalid),
 			FIMC_IS_HW_STOP_TIMEOUT);
 
-		if (!timetowait)
+		if (!timetowait) {
 			mserr_hw("wait FRAME_END timeout (%ld)", instance,
 				hw_ip, timetowait);
+			ret = -ETIME;
+		}
 
 		ret = fimc_is_hw_mcsc_clear_interrupt(hw_ip);
 		if (ret != 0) {
@@ -592,7 +594,7 @@ static int fimc_is_hw_mcsc_rdma_cfg(struct fimc_is_hw_ip *hw_ip, struct fimc_is_
 
 	plane = param->input.plane;
 	for (i = 0; i < plane; i++)
-		rdma_addr[i] = frame->sourceAddress[plane * frame->cur_buf_index + i];
+		rdma_addr[i] = frame->shot->uctl.scalerUd.sourceAddress[plane * frame->cur_buf_index + i];
 
 	/* DMA in */
 	msdbg_hw(2, "[F:%d]rdma_cfg [addr: %x]\n",
@@ -648,42 +650,42 @@ static void fimc_is_hw_mcsc_wdma_cfg(struct fimc_is_hw_ip *hw_ip, struct fimc_is
 	plane = param->output[MCSC_OUTPUT0].plane;
 	for (i = 0; i < plane; i++) {
 		wdma_addr[MCSC_OUTPUT0][i] =
-			frame->sc0TargetAddress[plane * frame->cur_buf_index + i];
+			frame->shot->uctl.scalerUd.sc0TargetAddress[plane * frame->cur_buf_index + i];
 		dbg_hw(2, "M0P(P:%d)(A:0x%X)\n", i, wdma_addr[MCSC_OUTPUT0][i]);
 	}
 
 	plane = param->output[MCSC_OUTPUT1].plane;
 	for (i = 0; i < plane; i++) {
 		wdma_addr[MCSC_OUTPUT1][i] =
-			frame->sc1TargetAddress[plane * frame->cur_buf_index + i];
+			frame->shot->uctl.scalerUd.sc1TargetAddress[plane * frame->cur_buf_index + i];
 		dbg_hw(2, "M1P(P:%d)(A:0x%X)\n", i, wdma_addr[MCSC_OUTPUT1][i]);
 	}
 
 	plane = param->output[MCSC_OUTPUT2].plane;
 	for (i = 0; i < plane; i++) {
 		wdma_addr[MCSC_OUTPUT2][i] =
-			frame->sc2TargetAddress[plane * frame->cur_buf_index + i];
+			frame->shot->uctl.scalerUd.sc2TargetAddress[plane * frame->cur_buf_index + i];
 		dbg_hw(2, "M2P(P:%d)(A:0x%X)\n", i, wdma_addr[MCSC_OUTPUT2][i]);
 	}
 
 	plane = param->output[MCSC_OUTPUT3].plane;
 	for (i = 0; i < plane; i++) {
 		wdma_addr[MCSC_OUTPUT3][i] =
-			frame->sc3TargetAddress[plane * frame->cur_buf_index + i];
+			frame->shot->uctl.scalerUd.sc3TargetAddress[plane * frame->cur_buf_index + i];
 		dbg_hw(2, "M3P(P:%d)(A:0x%X)\n", i, wdma_addr[MCSC_OUTPUT3][i]);
 	}
 
 	plane = param->output[MCSC_OUTPUT4].plane;
 	for (i = 0; i < plane; i++) {
 		wdma_addr[MCSC_OUTPUT4][i] =
-			frame->sc4TargetAddress[plane * frame->cur_buf_index + i];
+			frame->shot->uctl.scalerUd.sc4TargetAddress[plane * frame->cur_buf_index + i];
 		dbg_hw(2, "M4P(P:%d)(A:0x%X)\n", i, wdma_addr[MCSC_OUTPUT4][i]);
 	}
 
 	plane = param->output[MCSC_OUTPUT5].plane;
 	for (i = 0; i < plane; i++) {
 		wdma_addr[MCSC_OUTPUT5][i] =
-			frame->sc5TargetAddress[plane * frame->cur_buf_index + i];
+			frame->shot->uctl.scalerUd.sc5TargetAddress[plane * frame->cur_buf_index + i];
 		dbg_hw(2, "M5P(P:%d)(A:0x%X)\n", i, wdma_addr[MCSC_OUTPUT5][i]);
 	}
 skip_addr:
@@ -883,7 +885,6 @@ config:
 	msdbg_hw(2, "shot: hw_mcsc_out_configured[0x%lx]\n", instance, hw_ip,
 		hw_mcsc_out_configured);
 
-	hw_mcsc->instance = instance;
 	clear_bit(HW_MCSC_OUT_CLEARED_ALL, &hw_mcsc_out_configured);
 	set_bit(HW_CONFIG, &hw_ip->state);
 
@@ -983,6 +984,7 @@ int fimc_is_hw_mcsc_update_param(struct fimc_is_hw_ip *hw_ip,
 		control_cmd = true;
 		msdbg_hw(2, "update_param: hw_ip->instance(%d), control_cmd(%d)\n",
 			instance, hw_ip, hw_mcsc->instance, control_cmd);
+		hw_mcsc->instance = instance;
 	}
 
 	if (control_cmd || (lindex & LOWBIT_OF(PARAM_MCS_INPUT))
@@ -2369,8 +2371,9 @@ void fimc_is_hw_mcsc_djag_init(struct fimc_is_hw_ip *hw_ip)
 	BUG_ON(!hw_ip->priv_info);
 	BUG_ON(!cap);
 
-	hw_mcsc = (struct fimc_is_hw_mcsc *)hw_ip->priv_info;
 	if (cap->djag == MCSC_CAP_SUPPORT) {
+		hw_mcsc = (struct fimc_is_hw_mcsc *)hw_ip->priv_info;
+
 		hw_mcsc->djag_input_source = DEV_HW_MCSC0;
 		hw_mcsc->djag_prescale_ratio = MCSC_DJAG_PRESCALE_INDEX_1;
 	}

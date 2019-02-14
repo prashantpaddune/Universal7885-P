@@ -36,7 +36,6 @@ u32 fimc_is_sensor_convert_ns_to_us(u64 nsec);
 struct fimc_is_device_sensor;
 void fimc_is_sensor_ctl_frame_evt(struct fimc_is_device_sensor *device);
 int fimc_is_sensor_ctl_adjust_sync(struct fimc_is_device_sensor *device, u32 adjust_sync);
-int fimc_is_sensor_ctl_low_noise_mode(struct fimc_is_device_sensor *device, u32 mode);
 
 /* Actuator funtion */
 int fimc_is_actuator_ctl_set_position(struct fimc_is_device_sensor *device, u32 position);

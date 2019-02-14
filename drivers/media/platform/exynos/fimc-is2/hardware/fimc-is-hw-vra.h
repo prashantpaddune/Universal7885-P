@@ -39,8 +39,8 @@ struct fimc_is_hw_vra_setfile{
 
 struct fimc_is_hw_vra {
 	struct fimc_is_lib_vra		lib_vra;
-	struct fimc_is_hw_vra_setfile	setfile[SENSOR_POSITION_MAX][FIMC_IS_MAX_SETFILE];
-	struct fimc_is_hw_vra_setfile	*applied_setfile[SENSOR_POSITION_MAX];
+	struct fimc_is_hw_vra_setfile	setfile[SENSOR_POSITION_END][FIMC_IS_MAX_SETFILE];
+	struct fimc_is_hw_vra_setfile	*applied_setfile[SENSOR_POSITION_END];
 	u32				orientation;
 	atomic_t			ch1_count;
 };

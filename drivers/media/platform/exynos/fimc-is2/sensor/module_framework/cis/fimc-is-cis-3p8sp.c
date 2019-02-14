@@ -52,9 +52,8 @@ static u32 sensor_3p8sp_global_size;
 static const u32 **sensor_3p8sp_setfiles;
 static const u32 *sensor_3p8sp_setfile_sizes;
 static u32 sensor_3p8sp_max_setfile_num;
-static const struct sensor_pll_info_compact **sensor_3p8sp_pllinfos;
+static const struct sensor_pll_info **sensor_3p8sp_pllinfos;
 
-#if 0
 static void sensor_3p8sp_cis_data_calculation(const struct sensor_pll_info *pll_info, cis_shared_data *cis_data)
 {
 	u32 pll_voc_a = 0, vt_pix_clk_hz = 0;
@@ -127,73 +126,6 @@ static void sensor_3p8sp_cis_data_calculation(const struct sensor_pll_info *pll_
 	cis_data->min_coarse_integration_time = SENSOR_3P8SP_COARSE_INTEGRATION_TIME_MIN;
 	cis_data->max_margin_coarse_integration_time = SENSOR_3P8SP_COARSE_INTEGRATION_TIME_MAX_MARGIN;
 }
-#else
-
-static void sensor_3p8sp_cis_data_calculation(const struct sensor_pll_info_compact *pll_info_compact, cis_shared_data *cis_data)
-{
-	u32 vt_pix_clk_hz = 0;
-	u32 frame_rate = 0, max_fps = 0, frame_valid_us = 0;
-
-	BUG_ON(!pll_info_compact);
-
-	/* 1. get pclk value from pll info */
-	vt_pix_clk_hz = pll_info_compact->pclk;
-
-	dbg_sensor(1, "ext_clock(%d), mipi_datarate(%d), pclk(%d)\n",
-			pll_info_compact->ext_clk, pll_info_compact->mipi_datarate, pll_info_compact->pclk);
-
-	/* 2. the time of processing one frame calculation (us) */
-	cis_data->min_frame_us_time = (pll_info_compact->frame_length_lines * pll_info_compact->line_length_pck
-					/ (vt_pix_clk_hz / (1000 * 1000)));
-	cis_data->cur_frame_us_time = cis_data->min_frame_us_time;
-
-	/* 3. FPS calculation */
-	frame_rate = vt_pix_clk_hz / (pll_info_compact->frame_length_lines * pll_info_compact->line_length_pck);
-	dbg_sensor(1, "frame_rate (%d) = vt_pix_clk_hz(%d) / "
-		KERN_CONT "(pll_info_compact->frame_length_lines(%d) * pll_info_compact->line_length_pck(%d))\n",
-		frame_rate, vt_pix_clk_hz, pll_info_compact->frame_length_lines, pll_info_compact->line_length_pck);
-
-	/* calculate max fps */
-	max_fps = (vt_pix_clk_hz * 10) / (pll_info_compact->frame_length_lines * pll_info_compact->line_length_pck);
-	max_fps = (max_fps % 10 >= 5 ? frame_rate + 1 : frame_rate);
-
-	cis_data->pclk = vt_pix_clk_hz;
-	cis_data->max_fps = max_fps;
-	cis_data->frame_length_lines = pll_info_compact->frame_length_lines;
-	cis_data->line_length_pck = pll_info_compact->line_length_pck;
-	cis_data->line_readOut_time = sensor_cis_do_div64((u64)cis_data->line_length_pck * (u64)(1000 * 1000 * 1000), cis_data->pclk);
-	cis_data->rolling_shutter_skew = (cis_data->cur_height - 1) * cis_data->line_readOut_time;
-	cis_data->stream_on = false;
-
-	/* Frame valid time calcuration */
-	frame_valid_us = sensor_cis_do_div64((u64)cis_data->cur_height * (u64)cis_data->line_length_pck * (u64)(1000 * 1000), cis_data->pclk);
-	cis_data->frame_valid_us_time = (int)frame_valid_us;
-
-	dbg_sensor(1, "%s\n", __func__);
-	dbg_sensor(1, "Sensor size(%d x %d) setting: SUCCESS!\n",
-					cis_data->cur_width, cis_data->cur_height);
-	dbg_sensor(1, "Frame Valid(us): %d\n", frame_valid_us);
-	dbg_sensor(1, "rolling_shutter_skew: %lld\n", cis_data->rolling_shutter_skew);
-
-	dbg_sensor(1, "Fps: %d, max fps(%d)\n", frame_rate, cis_data->max_fps);
-	dbg_sensor(1, "min_frame_time(%d us)\n", cis_data->min_frame_us_time);
-	dbg_sensor(1, "Pixel rate(Mbps): %d\n", cis_data->pclk / 1000000);
-
-	/* Frame period calculation */
-	cis_data->frame_time = (cis_data->line_readOut_time * cis_data->cur_height / 1000);
-	cis_data->rolling_shutter_skew = (cis_data->cur_height - 1) * cis_data->line_readOut_time;
-
-	dbg_sensor(1, "[%s] frame_time(%d), rolling_shutter_skew(%lld)\n", __func__,
-		cis_data->frame_time, cis_data->rolling_shutter_skew);
-
-	/* Constant values */
-	cis_data->min_fine_integration_time = SENSOR_3P8SP_FINE_INTEGRATION_TIME_MIN;
-	cis_data->max_fine_integration_time = SENSOR_3P8SP_FINE_INTEGRATION_TIME_MAX;
-	cis_data->min_coarse_integration_time = SENSOR_3P8SP_COARSE_INTEGRATION_TIME_MIN;
-	cis_data->max_margin_coarse_integration_time = SENSOR_3P8SP_COARSE_INTEGRATION_TIME_MAX_MARGIN;
-}
-
-#endif
 
 static int sensor_3p8sp_wait_stream_off_status(cis_shared_data *cis_data)
 {
@@ -1047,11 +979,7 @@ int sensor_3p8sp_cis_adjust_frame_duration(struct v4l2_subdev *subdev,
 	dbg_sensor(1, "[%s](vsync cnt = %d) adj duration, frame duraion(%d), min_frame_us(%d)\n",
 			__func__, cis_data->sen_vsync_count, frame_duration, cis_data->min_frame_us_time);
 
-	if(input_exposure_time <= cis_data->min_frame_us_time)
-		*target_duration = cis_data->min_frame_us_time;
-	else
-		*target_duration = MAX(frame_duration, cis_data->min_frame_us_time);
-
+	*target_duration = MAX(frame_duration, cis_data->min_frame_us_time);
 
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);
@@ -1724,9 +1652,6 @@ static struct fimc_is_cis_ops cis_ops = {
 	.cis_compensate_gain_for_extremely_br = sensor_cis_compensate_gain_for_extremely_br,
 	.cis_wait_streamoff = sensor_cis_wait_streamoff,
 	.cis_wait_streamon = sensor_cis_wait_streamon,
-#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
-	.cis_set_initial_exposure = sensor_cis_set_initial_exposure,
-#endif
 };
 
 int cis_3p8sp_probe(struct i2c_client *client,
@@ -1810,18 +1735,13 @@ int cis_3p8sp_probe(struct i2c_client *client,
 		if (ret)
 			warn("f-number read is fail(%d)", ret);
 	} else {
-		cis->aperture_num = F2_0;
+		cis->aperture_num = F1_9;
 	}
 
 	probe_info("%s f-number %d\n", __func__, cis->aperture_num);
 
 	cis->use_dgain = true;
 	cis->hdr_ctrl_by_again = false;
-
-#ifdef USE_FACE_UNLOCK_AE_AWB_INIT
-	cis->use_initial_ae = of_property_read_bool(dnode, "use_initial_ae");
-	probe_info("%s use_initial_ae(%d)\n", __func__, cis->use_initial_ae);
-#endif
 
 	ret = of_property_read_string(dnode, "setfile", &setfile);
 	if (ret) {
@@ -1831,7 +1751,7 @@ int cis_3p8sp_probe(struct i2c_client *client,
 
 	if (strcmp(setfile, "default") == 0 ||
 			strcmp(setfile, "setA") == 0) {
-		probe_info("%s : setfile_A\n", __func__);
+		probe_info("%s : setfile_A for Non-PDAF\n", __func__);
 		sensor_3p8sp_global = sensor_3p8sp_setfile_A_Global;
 		sensor_3p8sp_global_size = ARRAY_SIZE(sensor_3p8sp_setfile_A_Global);
 		sensor_3p8sp_setfiles = sensor_3p8sp_setfiles_A;
@@ -1839,7 +1759,7 @@ int cis_3p8sp_probe(struct i2c_client *client,
 		sensor_3p8sp_max_setfile_num = ARRAY_SIZE(sensor_3p8sp_setfiles_A);
 		sensor_3p8sp_pllinfos = sensor_3p8sp_pllinfos_A;
 	} else if (strcmp(setfile, "setB") == 0) {
-		probe_info("%s setfile_B\n", __func__);
+		probe_info("%s setfile_B for PDAF\n", __func__);
 		sensor_3p8sp_global = sensor_3p8sp_setfile_B_Global;
 		sensor_3p8sp_global_size = ARRAY_SIZE(sensor_3p8sp_setfile_B_Global);
 		sensor_3p8sp_setfiles = sensor_3p8sp_setfiles_B;

@@ -15,7 +15,6 @@
 #define EEP_HEADER_AP_SHADING_START_ADDR   0x10
 #define EEP_HEADER_AP_SHADING_END_ADDR	   0x14
 #define EEP_HEADER_PROJECT_NAME_START_ADDR 0x38
-#define EEP_HEADER_MODULE_ID_ADDR          0xA8
 
 /* OEM referenced section */
 #define EEP_OEM_VER_START_ADDR             0x1E0

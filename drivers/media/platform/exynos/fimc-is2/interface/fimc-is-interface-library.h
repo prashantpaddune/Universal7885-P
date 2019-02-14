@@ -17,7 +17,6 @@
 #include "fimc-is-debug.h"
 #include "fimc-is-regs.h"
 #include "fimc-is-binary.h"
-#include "fimc-is-param.h"
 
 
 #define SET_CPU_AFFINITY	/* enable @ Exynos3475 */
@@ -31,13 +30,13 @@
 #endif
 
 #define LIB_ISP_OFFSET		(0x00000080)
-#define LIB_ISP_CODE_SIZE	(0x00340000)
+#define LIB_ISP_CODE_SIZE	(0x00240000)
 
 #define LIB_VRA_OFFSET		(0x00000400)
-#define LIB_VRA_CODE_SIZE	(0x00080000)
+#define LIB_VRA_CODE_SIZE	(0x00040000)
 
 #define LIB_RTA_OFFSET		(0x00000000)
-#define LIB_RTA_CODE_SIZE	(0x00200000)
+#define LIB_RTA_CODE_SIZE	(0x00100000)
 
 #define LIB_MAX_TASK		(FIMC_IS_MAX_TASK)
 
@@ -85,20 +84,16 @@ enum task_index {
 /* #define TASK_RTA_AFFINITY		(1) */ /* There is no need to set of cpu affinity for RTA task */
 #define TASK_VRA_AFFINITY		(2)
 
-#define CAMERA_BINARY_RTA_DATA_OFFSET   LIB_RTA_CODE_SIZE
-#define CAMERA_BINARY_DDK_DATA_OFFSET   0x400000
-#define CAMERA_BINARY_DDK_CODE_OFFSET   0x0C0000
-#define CAMERA_BINARY_VRA_DATA_OFFSET   0x080000
-#define CAMERA_BINARY_VRA_DATA_SIZE     0x040000
+#define CAMERA_BINARY_RTA_DATA_OFFSET   0x100000
+#define CAMERA_BINARY_DDK_DATA_OFFSET   0x2F0000
+#define CAMERA_BINARY_DDK_CODE_OFFSET   0x80000
+#define CAMERA_BINARY_VRA_DATA_OFFSET   0x40000
+#define CAMERA_BINARY_VRA_DATA_SIZE     0x40000
 
 enum BinLoadType{
     BINARY_LOAD_ALL,
     BINARY_LOAD_DATA
 };
-
-#define BINARY_LOAD_DDK_DONE		0x01
-#define BINARY_LOAD_RTA_DONE		0x02
-#define BINARY_LOAD_ALL_DONE	(BINARY_LOAD_DDK_DONE | BINARY_LOAD_RTA_DONE)
 
 typedef u32 (*task_func)(void *params);
 
@@ -221,10 +216,9 @@ struct fimc_is_lib_support {
 	struct fimc_is_lib_task			task_taaisp[TASK_INDEX_MAX];
 
 	bool					binary_load_flg;
-	int					binary_code_load_flg;
 
 	/* memory blocks */
-	struct lib_mem_block			mb_heap_rta;
+	struct lib_mem_block			mb_heap;
 	struct lib_mem_block			mb_dma;
 	struct lib_mem_block			mb_vra;
 	/* non-memory block */
@@ -256,8 +250,6 @@ struct fimc_is_lib_support {
 	struct lib_mem_tracks			*cur_tracks;
 #endif
 	struct general_intr_handler		intr_handler_preproc;
-	char		fw_name[50];		/* DDK */
-	char		rta_fw_name[50];	/* RTA */
 };
 
 struct fimc_is_memory_attribute {
@@ -269,35 +261,6 @@ struct fimc_is_memory_attribute {
 struct fimc_is_memory_change_data {
 	pgprot_t set_mask;
 	pgprot_t clear_mask;
-};
-
-/* Fast FDAE & FDAF */
- struct fd_point32 {
-	int x;
-	int y;
-};
-
-struct fd_rectangle {
-	u32 width;
-	u32 height;
-};
-
-struct fd_areabyrect {
-	struct fd_point32 top_left;
-	struct fd_rectangle span;
-};
-
-struct fd_faceinfo {
-	struct fd_areabyrect face_area;
-	int faceId;
-	int score;
-	u32 rotation;
-};
-
-struct fd_info {
-	struct fd_faceinfo face[MAX_FACE_COUNT];
-	int face_num;
-	u32 frame_count;
 };
 
 int fimc_is_load_bin(void);
@@ -332,6 +295,5 @@ int fimc_is_load_bin_on_boot(void);
 void fimc_is_load_ctrl_unlock(void);
 void fimc_is_load_ctrl_lock(void);
 void fimc_is_load_ctrl_init(void);
-int fimc_is_set_fw_names(char *fw_name, char *rta_fw_name);
 
 #endif

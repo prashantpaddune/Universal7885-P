@@ -48,11 +48,9 @@ enum exynos_sensor_position {
 	SENSOR_POSITION_REAR = 0,
 	SENSOR_POSITION_FRONT = 1,
 	SENSOR_POSITION_REAR2 = 2,
-	SENSOR_POSITION_FRONT2 = 3,
-	SENSOR_POSITION_REAR3 = 4,
-	SENSOR_POSITION_FRONT3 = 5,
-	SENSOR_POSITION_MAX,
-	SENSOR_POSITION_SECURE = 100,
+	SENSOR_POSITION_SECURE = 3,
+	SENSOR_POSITION_FRONT2 = 5,
+	SENSOR_POSITION_END
 };
 
 enum exynos_sensor_id {
@@ -93,19 +91,11 @@ enum exynos_sensor_id {
 	SENSOR_NAME_S5K3M3		 = 33,
 	SENSOR_NAME_S5K4H5YC_FF		 = 34,
 	SENSOR_NAME_S5K2L7		 = 35,
-	SENSOR_NAME_SAK2L3		 = 36,
-	SENSOR_NAME_SAK2L4		 = 37,
-	SENSOR_NAME_S5K3J1		 = 38,
-	SENSOR_NAME_S5K4HA		 = 39,
-	SENSOR_NAME_S5K3P9		 = 40,
-	SENSOR_NAME_S5K5E9		 = 41,
 	SENSOR_NAME_S5K2P7SQ		 = 43,
 	SENSOR_NAME_S5K3P8SP		 = 44,
 	SENSOR_NAME_S5K2P7SX		 = 45,
 	SENSOR_NAME_S5K4EC		 = 57,
 	SENSOR_NAME_S5K2P6		 = 58, /* TODO */
-	SENSOR_NAME_S5K3L6		 = 59,
-	SENSOR_NAME_S5K2X5		 = 60,
 
 	/* 101~200: SONY sensors */
 	SENSOR_NAME_IMX135		 = 101,
@@ -121,8 +111,6 @@ enum exynos_sensor_id {
 	SENSOR_NAME_IMX320		 = 111,
 	SENSOR_NAME_IMX333		 = 112,
 	SENSOR_NAME_IMX241		 = 113,
-	SENSOR_NAME_IMX345		 = 114,
-	SENSOR_NAME_IMX576		 = 115,
 
 	/* 201~255: Other vendor sensors */
 	SENSOR_NAME_SR261		 = 201,
@@ -167,8 +155,6 @@ enum actuator_name {
 	ACTUATOR_NAME_AK737X   = 18,
 	ACTUATOR_NAME_DW9808   = 19,
 	ACTUATOR_NAME_ZC535   = 20,
-	ACTUATOR_NAME_ZC569	= 21,
-	ACTUATOR_NAME_DW9823  = 22,
 
 	ACTUATOR_NAME_END,
 	ACTUATOR_NAME_NOTHING	= 100,
@@ -212,12 +198,6 @@ enum ois_name {
 	OIS_NAME_RUMBA_S6	= 2,
 	OIS_NAME_END,
 	OIS_NAME_NOTHING	= 100,
-};
-
-enum iris_name {
-	IRIS_NAME_AK7372	= 1,
-	IRIS_NAME_END,
-	IRIS_NAME_NOTHING	= 100,
 };
 
 enum sensor_peri_type {
@@ -301,7 +281,6 @@ struct sensor_open_extended {
 	struct sensor_protocol1 from_con;
 	struct sensor_protocol2 preprocessor_con;
 	struct sensor_protocol1 ois_con;
-	struct sensor_protocol1 iris_con;
 	u32 mclk;
 	u32 mipi_lane_num;
 	u32 mipi_speed;

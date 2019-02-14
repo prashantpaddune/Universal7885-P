@@ -249,7 +249,7 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 
 	fimc_is_ischain_mxp_adjust_crop(device, incrop->w, incrop->h, &otcrop->w, &otcrop->h);
 
-	if (queue->framecfg.quantization == V4L2_QUANTIZATION_FULL_RANGE) {
+	if (queue->framecfg.colorspace == V4L2_COLORSPACE_JPEG) {
 		crange = SCALER_OUTPUT_YUV_RANGE_FULL;
 		mdbg_pframe("CRange:W\n", device, subdev, frame);
 	} else {
@@ -428,23 +428,23 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 	switch (node->vid) {
 	case FIMC_IS_VIDEO_M0P_NUM:
 		index = PARAM_MCS_OUTPUT0;
-		target_addr = ldr_frame->sc0TargetAddress;
+		target_addr = ldr_frame->shot->uctl.scalerUd.sc0TargetAddress;
 		break;
 	case FIMC_IS_VIDEO_M1P_NUM:
 		index = PARAM_MCS_OUTPUT1;
-		target_addr = ldr_frame->sc1TargetAddress;
+		target_addr = ldr_frame->shot->uctl.scalerUd.sc1TargetAddress;
 		break;
 	case FIMC_IS_VIDEO_M2P_NUM:
 		index = PARAM_MCS_OUTPUT2;
-		target_addr = ldr_frame->sc2TargetAddress;
+		target_addr = ldr_frame->shot->uctl.scalerUd.sc2TargetAddress;
 		break;
 	case FIMC_IS_VIDEO_M3P_NUM:
 		index = PARAM_MCS_OUTPUT3;
-		target_addr = ldr_frame->sc3TargetAddress;
+		target_addr = ldr_frame->shot->uctl.scalerUd.sc3TargetAddress;
 		break;
 	case FIMC_IS_VIDEO_M4P_NUM:
 		index = PARAM_MCS_OUTPUT4;
-		target_addr = ldr_frame->sc4TargetAddress;
+		target_addr = ldr_frame->shot->uctl.scalerUd.sc4TargetAddress;
 		break;
 	default:
 		mserr("vid(%d) is not matched", device, subdev, node->vid);
@@ -507,12 +507,11 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 				otcrop->x, otcrop->y, otcrop->w, otcrop->h);
 		}
 
-		/* buf_tag should be set by unit of stride */
 		ret = fimc_is_ischain_buf_tag(device,
 			subdev,
 			ldr_frame,
 			pixelformat,
-			mcs_output->dma_stride_y,
+			otcrop->w,
 			otcrop->h,
 			target_addr);
 		if (ret) {

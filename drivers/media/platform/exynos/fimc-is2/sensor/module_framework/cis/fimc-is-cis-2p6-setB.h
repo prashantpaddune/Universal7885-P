@@ -98,7 +98,7 @@ const u32 sensor_2p6_setfile_B_Global[] = {
 	0x6214, 0x7970, 0x02,
 };
 
-/* 0. 4608 x 3456 / No-Bin, 4:3, 30fps / Support PDAF Tail, EXTCLK 26Mhz */
+/* 1. 4608 x 3456 / No-Bin, 4:3, 30fps / Support PDAF Tail, EXTCLK 26Mhz */
 const u32 sensor_2p6_setfile_B_4608x3456_30fps[] = {
 	0xFCFC, 0x4000, 0x02,
 	0x6028, 0x2000, 0x02,
@@ -133,7 +133,7 @@ const u32 sensor_2p6_setfile_B_4608x3456_30fps[] = {
 	0x6214, 0x7970, 0x02,
 };
 
-/* 1. 4608 x 2624 / No-Bin, 16:9, 30fps / Support PDAF Tail , EXTCLK 26Mhz */
+/* 2. 4608 x 2624 / No-Bin, 16:9, 30fps / Support PDAF Tail , EXTCLK 26Mhz */
 const u32 sensor_2p6_setfile_B_4608x2624_30fps[] = {
 	0xFCFC, 0x4000, 0x02,
 	0x6028, 0x2000, 0x02,
@@ -166,47 +166,6 @@ const u32 sensor_2p6_setfile_B_4608x2624_30fps[] = {
 	0x021E, 0x0E10, 0x02,
 	0x0216, 0x0000, 0x02,
 	0x6214, 0x7970, 0x02,
-};
-
-/* 2. 4608 x 2592 / No-Bin, 16:9, 30fps / Support PDAF Tail , EXTCLK 26Mhz */
-const u32 sensor_2p6_setfile_B_4608x2592_30fps[] = {
-	0x0100,	0x0000,	0x02,
-	0xFCFC,	0x4000,	0x02,
-	0x6028,	0x2000,	0x02,
-	0x6214,	0x7971,	0x02,
-	0x6218,	0x7150,	0x02,
-	0x30CE,	0x0000,	0x02,
-	0x37F6,	0x0021,	0x02,
-	0x3198,	0x0007,	0x02,
-	0x319A,	0x0100,	0x02,
-	0x319C,	0x0130,	0x02,
-	0x3056,	0x0100,	0x02,
-	0x602A,	0x1BB0,	0x02,
-	0x6F12,	0x0000,	0x02,
-	0x0B0E,	0x0100,	0x02,
-	0x30D8,	0x0100,	0x02,
-	0x31B0,	0x0008,	0x02,
-	0x0340,	0x0E1A,	0x02,
-	0x0342,	0x1428,	0x02,
-	0x0344,	0x0018,	0x02,
-	0x0346,	0x01C0,	0x02,
-	0x0348,	0x1217,	0x02,
-	0x034A,	0x0BDF,	0x02,
-	0x034C,	0x1200,	0x02,
-	0x034E,	0x0A20,	0x02,
-	0x0900,	0x0011,	0x02,
-	0x0386,	0x0001,	0x02,
-	0x0400,	0x0000,	0x02,
-	0x0404,	0x0000,	0x02,
-	0x0306,	0x0061,	0x02,
-	0x1130,	0x440E,	0x02,
-	0x030E,	0x006F,	0x02,
-	0x300A,	0x0000,	0x02,
-	0x0202,	0x0E10,	0x02,
-	0x021E,	0x0E10,	0x02,
-	0x0216,	0x0000,	0x02,
-	0x6214,	0x7970,	0x02,
-	0x0100,	0x0100,	0x02,
 };
 
 /* 3. 4608 x 2240 / No-Bin, 18.5:9, 30fps / Support PDAF Tail  , EXTCLK 26Mhz */
@@ -244,89 +203,7 @@ const u32 sensor_2p6_setfile_B_4608x2240_30fps[] = {
 	0x6214, 0x7970, 0x02,
 };
 
-/* 4. 4608 x 2176 / No-Bin, 19.5:9, 30fps / Support PDAF Tail , EXTCLK 26Mhz */
-const u32 sensor_2p6_setfile_B_4608x2176_30fps[] = {
-    0x0100, 0x0000, 0x02,
-    0xFCFC, 0x4000, 0x02,
-    0x6028, 0x2000, 0x02,
-    0x6214, 0x7971, 0x02,
-    0x6218, 0x7150, 0x02,
-    0x30CE, 0x0000, 0x02,
-    0x37F6, 0x0021, 0x02,
-    0x3198, 0x0007, 0x02,
-    0x319A, 0x0100, 0x02,
-    0x319C, 0x0130, 0x02,
-    0x3056, 0x0100, 0x02,
-    0x602A, 0x1BB0, 0x02,
-    0x6F12, 0x0000, 0x02,
-    0x0B0E, 0x0100, 0x02,
-    0x30D8, 0x0100, 0x02,
-    0x31B0, 0x0008, 0x02,
-    0x0340, 0x0E1A, 0x02,
-    0x0342, 0x1428, 0x02,
-    0x0344, 0x0018, 0x02,
-    0x0346, 0x0290, 0x02,
-    0x0348, 0x1217, 0x02,
-    0x034A, 0x0B0F, 0x02,
-    0x034C, 0x1200, 0x02,
-    0x034E, 0x0880, 0x02,
-    0x0900, 0x0011, 0x02,
-    0x0386, 0x0001, 0x02,
-    0x0400, 0x0000, 0x02,
-    0x0404, 0x0000, 0x02,
-    0x0306, 0x0061, 0x02,
-    0x1130, 0x440E, 0x02,
-    0x030E, 0x006F, 0x02,
-    0x300A, 0x0000, 0x02,
-    0x0202, 0x0E10, 0x02,
-    0x021E, 0x0E10, 0x02,
-    0x0216, 0x0000, 0x02,
-    0x6214, 0x7970, 0x02,
-    0x0100, 0x0100, 0x02,
-};
-
-/* 5. 3456 x 3456 / No-Bin, 1:1, 30fps / Support PDAF Tail , EXTCLK 26Mhz */
-const u32 sensor_2p6_setfile_B_3456x3456_30fps[] = {
-	0x0100,	0x0000,	0x02,
-	0xFCFC,	0x4000,	0x02,
-	0x6028,	0x2000,	0x02,
-	0x6214,	0x7971,	0x02,
-	0x6218,	0x7150,	0x02,
-	0x30CE,	0x0000,	0x02,
-	0x37F6,	0x0021,	0x02,
-	0x3198,	0x0007,	0x02,
-	0x319A,	0x0100,	0x02,
-	0x319C,	0x00F0,	0x02,
-	0x3056,	0x0100,	0x02,
-	0x602A,	0x1BB0,	0x02,
-	0x6F12,	0x0000,	0x02,
-	0x0B0E,	0x0100,	0x02,
-	0x30D8,	0x0100,	0x02,
-	0x31B0,	0x0008,	0x02,
-	0x0340,	0x0E1A,	0x02,
-	0x0342,	0x1428,	0x02,
-	0x0344,	0x0258,	0x02,
-	0x0346,	0x0010,	0x02,
-	0x0348,	0x0FD7,	0x02,
-	0x034A,	0x0D8F,	0x02,
-	0x034C,	0x0D80,	0x02,
-	0x034E,	0x0D80,	0x02,
-	0x0900,	0x0011,	0x02,
-	0x0386,	0x0001,	0x02,
-	0x0400,	0x0000,	0x02,
-	0x0404,	0x0000,	0x02,
-	0x0306,	0x0061,	0x02,
-	0x1130,	0x440E,	0x02,
-	0x030E,	0x006F,	0x02,
-	0x300A,	0x0000,	0x02,
-	0x0202,	0x0E10,	0x02,
-	0x021E,	0x0E10,	0x02,
-	0x0216,	0x0000,	0x02,
-	0x6214,	0x7970,	0x02,
-	0x0100,	0x0100,	0x02,
-};
-
-/* 6. 2304 x 1728 / 2-Bin, 4:3, 30fps / Support PDAF Tail, EXTCLK 26Mhz */
+/* 4. 2304 x 1728 / 2-Bin, 4:3, 30fps / Support PDAF Tail, EXTCLK 26Mhz */
 const u32 sensor_2p6_setfile_B_2304x1728_30fps[] = {
 	0xFCFC, 0x4000, 0x02,
 	0x6028, 0x2000, 0x02,
@@ -361,7 +238,7 @@ const u32 sensor_2p6_setfile_B_2304x1728_30fps[] = {
 	0x6214, 0x7970, 0x02,
 };
 
-/* 7. 2304 x 1728 / 2-Bin, 4:3, 15fps / Support PDAF Tail, EXTCLK 26Mhz */
+/* 5. 2304 x 1728 / 2-Bin, 4:3, 15fps / Support PDAF Tail, EXTCLK 26Mhz */
 const u32 sensor_2p6_setfile_B_2304x1728_15fps[] = {
 	0xFCFC, 0x4000, 0x02,
 	0x6028, 0x2000, 0x02,
@@ -396,7 +273,7 @@ const u32 sensor_2p6_setfile_B_2304x1728_15fps[] = {
 	0x6214, 0x7970, 0x02,
 };
 
-/* 8. 2304 x 1312 / 2-Bin, 16:9, 30fps / Support Tail Mode, EXTCLK 26Mhz */
+/* 6. 2304 x 1312 / 2-Bin, 16:9, 30fps / Support Tail Mode, EXTCLK 26Mhz */
 const u32 sensor_2p6_setfile_B_2304x1312_30fps[] = {
 	0xFCFC, 0x4000, 0x02,
 	0x6028, 0x2000, 0x02,
@@ -431,48 +308,7 @@ const u32 sensor_2p6_setfile_B_2304x1312_30fps[] = {
 	0x6214, 0x7970, 0x02,
 };
 
-/* 9. 2304 x 1296 / 2-Bin, 16:9, 30fps / Support Tail Mode, EXTCLK 26Mhz */
-const u32 sensor_2p6_setfile_B_2304x1296_30fps[] = {
-	0x0100,	0x0000,	0x02,
-	0xFCFC,	0x4000,	0x02,
-	0x6028,	0x2000,	0x02,
-	0x6214,	0x7971,	0x02,
-	0x6218,	0x7150,	0x02,
-	0x30CE,	0x0040,	0x02,
-	0x37F6,	0x0031,	0x02,
-	0x3198,	0x0066,	0x02,
-	0x319A,	0x0000,	0x02,
-	0x319C,	0x0130,	0x02,
-	0x3056,	0x0100,	0x02,
-	0x602A,	0x1BB0,	0x02,
-	0x6F12,	0x0000,	0x02,
-	0x0B0E,	0x0100,	0x02,
-	0x30D8,	0x0100,	0x02,
-	0x31B0,	0x0004,	0x02,
-	0x0340,	0x0E1A,	0x02,
-	0x0342,	0x1428,	0x02,
-	0x0344,	0x0018,	0x02,
-	0x0346,	0x01C0,	0x02,
-	0x0348,	0x1217,	0x02,
-	0x034A,	0x0BDF,	0x02,
-	0x034C,	0x0900,	0x02,
-	0x034E,	0x0510,	0x02,
-	0x0900,	0x0112,	0x02,
-	0x0386,	0x0003,	0x02,
-	0x0400,	0x0001,	0x02,
-	0x0404,	0x0020,	0x02,
-	0x0306,	0x0061,	0x02,
-	0x1130,	0x440E,	0x02,
-	0x030E,	0x0068,	0x02,
-	0x300A,	0x0000,	0x02,
-	0x0202,	0x0E10,	0x02,
-	0x021E,	0x0E10,	0x02,
-	0x0216,	0x0000,	0x02,
-	0x6214,	0x7970,	0x02,
-	0x0100,	0x0100,	0x02,
-};
-
-/* 10. 2304 x 1120 / 2-Bin, 18.5:9, 30fps / Support PDAF Tail , EXTCLK 26Mhz */
+/* 7. 2304 x 1120 / 2-Bin, 18.5:9, 30fps / Support PDAF Tail , EXTCLK 26Mhz */
 const u32 sensor_2p6_setfile_B_2304x1120_30fps[] = {
 	0xFCFC, 0x4000, 0x02,
 	0x6028, 0x2000, 0x02,
@@ -507,7 +343,7 @@ const u32 sensor_2p6_setfile_B_2304x1120_30fps[] = {
 	0x6214, 0x7970, 0x02,
 };
 
-/* 11. 1152 x 864 / 4-Bin, 4:3, 120fps, EXTCLK 26Mhz */
+/* 8. 1152 x 864 / 4-Bin, 4:3, 120fps, EXTCLK 26Mhz */
 const u32 sensor_2p6_setfile_B_1152x864_120fps[] = {
 	0xFCFC, 0x4000, 0x02,
 	0x6028, 0x2000, 0x02,
@@ -542,7 +378,7 @@ const u32 sensor_2p6_setfile_B_1152x864_120fps[] = {
 	0x6214, 0x7970, 0x02,
 };
 
-/* 12. 1152 x 656 / 4-Bin, 16:9, 120fps, EXTCLK 26Mhz */
+/* 9. 1152 x 656 / 4-Bin, 16:9, 120fps, EXTCLK 26Mhz */
 const u32 sensor_2p6_setfile_B_1152x656_120fps[] = {
 	0xFCFC, 0x4000, 0x02,
 	0x6028, 0x2000, 0x02,
@@ -594,36 +430,12 @@ const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_4608x2624_30fps = {
 	0x1428, /* line_length_pck		(0x0342) */
 };
 
-const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_4608x2592_30fps = {
-	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
-	1443 * 1000 * 1000, /* mipi_datarate */
-	560440000,  /* pclk  = VT pix CLK * 4(this value is different by cis) */
-	0x0E1A, /* frame_length_lines	(0x0340) */
-	0x1428, /* line_length_pck		(0x0342) */
-};
-
 const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_4608x2240_30fps = {
 	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
 	1443 * 1000 * 1000, /* mipi_datarate */
 	560440000,  /* pclk  = VT pix CLK * 4(this value is different by cis) */
 	0x0E1A, /* frame_length_lines	(0x0340) */
 	0x1428, /* line_length_pck		(0x0342) */
-};
-
-const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_4608x2176_30fps = {
-    EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
-    1443 * 1000 * 1000, /* mipi_datarate */
-    560440000,  /* pclk  = VT pix CLK * 4(this value is different by cis) */
-    0x0E1A, /* frame_length_lines   (0x0340) */
-    0x1428, /* line_length_pck      (0x0342) */
-};
-
-const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_3456x3456_30fps = {
-    EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
-    1443 * 1000 * 1000, /* mipi_datarate */
-    560440000,  /* pclk  = VT pix CLK * 4(this value is different by cis) */
-    0x0E1A, /* frame_length_lines   (0x0340) */
-    0x1428, /* line_length_pck      (0x0342) */
 };
 
 const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_2304x1728_30fps = {
@@ -648,14 +460,6 @@ const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_2304x1312_30fps = {
 	560440000,  /* pclk  = VT pix CLK * 4(this value is different by cis) */
 	0x0AAA, /* frame_length_lines	(0x0340) */
 	0x1AA8, /* line_length_pck		(0x0342) */
-};
-
-const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_2304x1296_30fps = {
-	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
-	1352 * 1000 * 1000, /* mipi_datarate */
-	560440000,  /* pclk  = VT pix CLK * 4(this value is different by cis) */
-	0x0E1A, /* frame_length_lines	(0x0340) */
-	0x1428, /* line_length_pck		(0x0342) */
 };
 
 const struct sensor_pll_info_compact sensor_2p6_pllinfo_B_2304x1120_30fps = {
@@ -712,21 +516,6 @@ const struct sensor_pll_info sensor_2p6_pllinfo_B_4608x2624_30fps = {
 	0x1428, /* line_length_pck		(0x0342) */
 };
 
-const struct sensor_pll_info sensor_2p6_pllinfo_B_4608x2592_30fps = {
-	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
-	0x03, /* vt_pix_clk_div	(0x0300) */
-	0x01, /* vt_sys_clk_div	(0x0302) */
-	0x06, /* pre_pll_clk_div(0x0304) */
-	0x61, /* pll_multiplier	(0x0306) */
-	0x08, /* op_pix_clk_div	(0x0308) */
-	0x01, /* op_sys_clk_div	(0x030A) */
-
-	0x04, /* secnd_pre_pll_clk_div(0x030C) */
-	0x6F, /* secnd_pll_multiplier	(0x030E) */
-	0x0E1A, /* frame_length_lines	(0x0340) */
-	0x1428, /* line_length_pck		(0x0342) */
-};
-
 const struct sensor_pll_info sensor_2p6_pllinfo_B_4608x2240_30fps = {
 	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
 	0x03, /* vt_pix_clk_div	(0x0300) */
@@ -740,36 +529,6 @@ const struct sensor_pll_info sensor_2p6_pllinfo_B_4608x2240_30fps = {
 	0x6F, /* secnd_pll_multiplier	(0x030E) */
 	0x0E1A, /* frame_length_lines	(0x0340) */
 	0x1428, /* line_length_pck		(0x0342) */
-};
-
-const struct sensor_pll_info sensor_2p6_pllinfo_B_4608x2176_30fps = {
-    EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
-    0x03, /* vt_pix_clk_div (0x0300) */
-    0x01, /* vt_sys_clk_div (0x0302) */
-    0x06, /* pre_pll_clk_div(0x0304) */
-    0x61, /* pll_multiplier (0x0306) */
-    0x08, /* op_pix_clk_div (0x0308) */
-    0x01, /* op_sys_clk_div (0x030A) */
-
-    0x04, /* secnd_pre_pll_clk_div(0x030C) */
-    0x6F, /* secnd_pll_multiplier   (0x030E) */
-    0x0E1A, /* frame_length_lines   (0x0340) */
-    0x1428, /* line_length_pck      (0x0342) */
-};
-
-const struct sensor_pll_info sensor_2p6_pllinfo_B_3456x3456_30fps = {
-    EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
-    0x03, /* vt_pix_clk_div (0x0300) */
-    0x01, /* vt_sys_clk_div (0x0302) */
-    0x06, /* pre_pll_clk_div(0x0304) */
-    0x61, /* pll_multiplier (0x0306) */
-    0x08, /* op_pix_clk_div (0x0308) */
-    0x01, /* op_sys_clk_div (0x030A) */
-
-    0x04, /* secnd_pre_pll_clk_div(0x030C) */
-    0x6F, /* secnd_pll_multiplier   (0x030E) */
-    0x0E1A, /* frame_length_lines   (0x0340) */
-    0x1428, /* line_length_pck      (0x0342) */
 };
 
 const struct sensor_pll_info sensor_2p6_pllinfo_B_2304x1728_30fps = {
@@ -815,21 +574,6 @@ const struct sensor_pll_info sensor_2p6_pllinfo_B_2304x1312_30fps = {
 	0x68, /* secnd_pll_multiplier	(0x030E) */
 	0x0AAA, /* frame_length_lines	(0x0340) */
 	0x1AA8, /* line_length_pck		(0x0342) */
-};
-
-const struct sensor_pll_info sensor_2p6_pllinfo_B_2304x1296_30fps = {
-	EXT_CLK_Mhz * 1000 * 1000, /* ext_clk */
-	0x03, /* vt_pix_clk_div	(0x0300) */
-	0x01, /* vt_sys_clk_div	(0x0302) */
-	0x06, /* pre_pll_clk_div(0x0304) */
-	0x61, /* pll_multiplier	(0x0306) */
-	0x08, /* op_pix_clk_div	(0x0308) */
-	0x01, /* op_sys_clk_div	(0x030A) */
-
-	0x04, /* secnd_pre_pll_clk_div(0x030C) */
-	0x68, /* secnd_pll_multiplier	(0x030E) */
-	0x0E1A, /* frame_length_lines	(0x0340) */
-	0x1428, /* line_length_pck		(0x0342) */
 };
 
 const struct sensor_pll_info sensor_2p6_pllinfo_B_2304x1120_30fps = {
@@ -882,14 +626,10 @@ static const u32 *sensor_2p6_setfiles_B[] = {
 	/* 16x12 margin */
 	sensor_2p6_setfile_B_4608x3456_30fps,
 	sensor_2p6_setfile_B_4608x2624_30fps,
-	sensor_2p6_setfile_B_4608x2592_30fps,
 	sensor_2p6_setfile_B_4608x2240_30fps,
-	sensor_2p6_setfile_B_4608x2176_30fps,
-	sensor_2p6_setfile_B_3456x3456_30fps,
 	sensor_2p6_setfile_B_2304x1728_30fps,
 	sensor_2p6_setfile_B_2304x1728_15fps,
 	sensor_2p6_setfile_B_2304x1312_30fps,
-	sensor_2p6_setfile_B_2304x1296_30fps,
 	sensor_2p6_setfile_B_2304x1120_30fps,
 	sensor_2p6_setfile_B_1152x864_120fps,
 	sensor_2p6_setfile_B_1152x656_120fps,
@@ -899,14 +639,10 @@ static const u32 sensor_2p6_setfile_B_sizes[] = {
 	/* 16x12 margin */
 	sizeof(sensor_2p6_setfile_B_4608x3456_30fps) / sizeof(sensor_2p6_setfile_B_4608x3456_30fps[0]),
 	sizeof(sensor_2p6_setfile_B_4608x2624_30fps) / sizeof(sensor_2p6_setfile_B_4608x2624_30fps[0]),
-	sizeof(sensor_2p6_setfile_B_4608x2592_30fps) / sizeof(sensor_2p6_setfile_B_4608x2592_30fps[0]),
 	sizeof(sensor_2p6_setfile_B_4608x2240_30fps) / sizeof(sensor_2p6_setfile_B_4608x2240_30fps[0]),
-	sizeof(sensor_2p6_setfile_B_4608x2176_30fps) / sizeof(sensor_2p6_setfile_B_4608x2176_30fps[0]),
-	sizeof(sensor_2p6_setfile_B_3456x3456_30fps) / sizeof(sensor_2p6_setfile_B_3456x3456_30fps[0]),
 	sizeof(sensor_2p6_setfile_B_2304x1728_30fps) / sizeof(sensor_2p6_setfile_B_2304x1728_30fps[0]),
 	sizeof(sensor_2p6_setfile_B_2304x1728_15fps) / sizeof(sensor_2p6_setfile_B_2304x1728_15fps[0]),
 	sizeof(sensor_2p6_setfile_B_2304x1312_30fps) / sizeof(sensor_2p6_setfile_B_2304x1312_30fps[0]),
-	sizeof(sensor_2p6_setfile_B_2304x1296_30fps) / sizeof(sensor_2p6_setfile_B_2304x1296_30fps[0]),
 	sizeof(sensor_2p6_setfile_B_2304x1120_30fps) / sizeof(sensor_2p6_setfile_B_2304x1120_30fps[0]),
 	sizeof(sensor_2p6_setfile_B_1152x864_120fps) / sizeof(sensor_2p6_setfile_B_1152x864_120fps[0]),
 	sizeof(sensor_2p6_setfile_B_1152x656_120fps) / sizeof(sensor_2p6_setfile_B_1152x656_120fps[0]),
@@ -921,14 +657,10 @@ static const struct sensor_pll_info *sensor_2p6_pllinfos_B[] =
 	/* 16x12 margin */
 	&sensor_2p6_pllinfo_B_4608x3456_30fps,
 	&sensor_2p6_pllinfo_B_4608x2624_30fps,
-	&sensor_2p6_pllinfo_B_4608x2592_30fps,
 	&sensor_2p6_pllinfo_B_4608x2240_30fps,
-	&sensor_2p6_pllinfo_B_4608x2176_30fps,
-	&sensor_2p6_pllinfo_B_3456x3456_30fps,
 	&sensor_2p6_pllinfo_B_2304x1728_30fps,
 	&sensor_2p6_pllinfo_B_2304x1728_15fps,
 	&sensor_2p6_pllinfo_B_2304x1312_30fps,
-	&sensor_2p6_pllinfo_B_2304x1296_30fps,
 	&sensor_2p6_pllinfo_B_2304x1120_30fps,
 	&sensor_2p6_pllinfo_B_1152x864_120fps,
 	&sensor_2p6_pllinfo_B_1152x656_120fps,

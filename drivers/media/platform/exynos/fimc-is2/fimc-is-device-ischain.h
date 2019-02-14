@@ -52,14 +52,6 @@
 
 #define NI_BACKUP_MAX			10
 
-/* TODO: remove AA_SCENE_MODE_REMOSAIC */
-#ifdef ENABLE_REMOSAIC_CAPTURE_WITH_ROTATION
-#define CHK_REMOSAIC_SCN(sceneMode)	\
-	(((sceneMode == AA_SCENE_MODE_REMOSAIC) \
-	|| (sceneMode == AA_SCENE_MODE_REMOSAIC_PURE_BAYER_ONLY) \
-	|| (sceneMode == AA_SCENE_MODE_REMOSAIC_MFHDR_PURE_BAYER_ONLY)) ? 1 : 0)
-#endif
-
 /*global state*/
 enum fimc_is_ischain_state {
 	FIMC_IS_ISCHAIN_OPENING,
@@ -113,9 +105,7 @@ struct fimc_is_device_ischain {
 
 	u32					setfile;
 
-#if !defined(FAST_FDAE)
 	struct camera2_fd_uctl			fdUd;
-#endif
 #ifdef ENABLE_SENSOR_DRIVER
 	struct camera2_uctl			peri_ctls[SENSOR_MAX_CTL];
 #endif
@@ -163,7 +153,6 @@ struct fimc_is_device_ischain {
 #endif
 	u32					private_data;
 	struct fimc_is_device_sensor		*sensor;
-	u32					sensor_id;
 	struct pm_qos_request			user_qos;
 
 	/* Async metadata control to reduce frame delay */
@@ -329,13 +318,6 @@ int fimc_is_ischain_buf_tag(struct fimc_is_device_ischain *device,
 	u32 width,
 	u32 height,
 	u32 target_addr[]);
-int fimc_is_ischain_buf_tag_64bit(struct fimc_is_device_ischain *device,
-	struct fimc_is_subdev *subdev,
-	struct fimc_is_frame *ldr_frame,
-	u32 pixelformat,
-	u32 width,
-	u32 height,
-	uint64_t target_addr[]);
 
 extern const struct fimc_is_queue_ops fimc_is_ischain_3aa_ops;
 extern const struct fimc_is_queue_ops fimc_is_ischain_isp_ops;

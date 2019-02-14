@@ -349,11 +349,9 @@ int fimc_is_interface_3aa_probe(struct fimc_is_interface_ischain *itfc,
 
 		gPtr_lib_support.pdev		= pdev;
 
-#if !defined(ENABLE_DYNAMIC_MEM)
 		info_itfc("[ID:%2d] kvaddr for taaisp: 0x%lx\n", hw_id,
 			CALL_BUFOP(gPtr_lib_support.minfo->pb_taaisp, kvaddr,
 					gPtr_lib_support.minfo->pb_taaisp));
-#endif
 	}
 
 	set_bit(IS_CHAIN_IF_STATE_INIT, &itf_3aa->state);
@@ -431,11 +429,9 @@ int fimc_is_interface_isp_probe(struct fimc_is_interface_ischain *itfc,
 
 		gPtr_lib_support.pdev		= pdev;
 
-#if !defined(ENABLE_DYNAMIC_MEM)
 		info_itfc("[ID:%2d] kvaddr for taaisp: 0x%lx\n", hw_id,
 			CALL_BUFOP(gPtr_lib_support.minfo->pb_taaisp, kvaddr,
 					gPtr_lib_support.minfo->pb_taaisp));
-#endif
 	}
 
 	set_bit(IS_CHAIN_IF_STATE_INIT, &itf_isp->state);

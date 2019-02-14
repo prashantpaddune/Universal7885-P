@@ -379,8 +379,8 @@ struct fimc_is_hw_mcsc_cap {
 };
 
 struct fimc_is_hw_mcsc {
-	struct	hw_api_scaler_setfile setfile[SENSOR_POSITION_MAX][FIMC_IS_MAX_SETFILE];
-	struct	hw_api_scaler_setfile *applied_setfile[SENSOR_POSITION_MAX];
+	struct	hw_api_scaler_setfile setfile[SENSOR_POSITION_END][FIMC_IS_MAX_SETFILE];
+	struct	hw_api_scaler_setfile *applied_setfile[SENSOR_POSITION_END];
 	struct	fimc_is_hw_mcsc_cap cap;
 
 	u32	in_img_format;

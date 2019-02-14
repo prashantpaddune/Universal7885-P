@@ -411,43 +411,54 @@ u32 get_hw_id_from_group(u32 group_id)
 	return hw_id;
 }
 
-static inline void fimc_is_hardware_fill_frame_info(u32 instance,
-	struct fimc_is_frame *hw_frame,
-	struct fimc_is_frame *frame)
+int fimc_is_set_mshot_frame(u32 instance,
+	struct fimc_is_frame *frame,
+	struct fimc_is_framemgr *framemgr)
 {
-	hw_frame->groupmgr	= frame->groupmgr;
-	hw_frame->group		= frame->group;
-	hw_frame->shot		= frame->shot;
-	hw_frame->shot_ext	= frame->shot_ext;
-	hw_frame->kvaddr_shot	= frame->kvaddr_shot;
-	hw_frame->dvaddr_shot	= frame->dvaddr_shot;
-	hw_frame->shot_size	= frame->shot_size;
-	hw_frame->fcount	= frame->fcount;
-	hw_frame->rcount	= frame->rcount;
-	hw_frame->bak_flag      = GET_OUT_FLAG_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, frame->bak_flag);
-	hw_frame->out_flag      = GET_OUT_FLAG_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, frame->out_flag);
-	hw_frame->core_flag	= 0;
-	atomic_set(&hw_frame->shot_done_flag, 1);
+	int ret = 0;
+	int i, j;
+	struct fimc_is_frame *hw_frame;
 
-	memcpy(hw_frame->dvaddr_buffer, frame->dvaddr_buffer, sizeof(frame->dvaddr_buffer));
-	memcpy(hw_frame->txcTargetAddress, frame->txcTargetAddress, sizeof(frame->txcTargetAddress));
-	memcpy(hw_frame->txpTargetAddress, frame->txpTargetAddress, sizeof(frame->txpTargetAddress));
-	memcpy(hw_frame->mrgTargetAddress, frame->mrgTargetAddress, sizeof(frame->mrgTargetAddress));
-	memcpy(hw_frame->efdTargetAddress, frame->efdTargetAddress, sizeof(frame->efdTargetAddress));
-	memcpy(hw_frame->ixcTargetAddress, frame->ixcTargetAddress, sizeof(frame->ixcTargetAddress));
-	memcpy(hw_frame->ixpTargetAddress, frame->ixpTargetAddress, sizeof(frame->ixpTargetAddress));
-	memcpy(hw_frame->mexcTargetAddress, frame->mexcTargetAddress, sizeof(frame->mexcTargetAddress));
-	memcpy(hw_frame->sccTargetAddress, frame->sccTargetAddress, sizeof(frame->sccTargetAddress));
-	memcpy(hw_frame->scpTargetAddress, frame->scpTargetAddress, sizeof(frame->scpTargetAddress));
-	memcpy(hw_frame->sc0TargetAddress, frame->sc0TargetAddress, sizeof(frame->sc0TargetAddress));
-	memcpy(hw_frame->sc1TargetAddress, frame->sc1TargetAddress, sizeof(frame->sc1TargetAddress));
-	memcpy(hw_frame->sc2TargetAddress, frame->sc2TargetAddress, sizeof(frame->sc2TargetAddress));
-	memcpy(hw_frame->sc3TargetAddress, frame->sc3TargetAddress, sizeof(frame->sc3TargetAddress));
-	memcpy(hw_frame->sc4TargetAddress, frame->sc4TargetAddress, sizeof(frame->sc4TargetAddress));
-	memcpy(hw_frame->sc5TargetAddress, frame->sc5TargetAddress, sizeof(frame->sc5TargetAddress));
-	memcpy(hw_frame->dxcTargetAddress, frame->dxcTargetAddress, sizeof(frame->dxcTargetAddress));
+	for (j = 1; j <= frame->num_buffers; j++) {
+		hw_frame = get_frame(framemgr, FS_HW_FREE);
+		if (hw_frame == NULL) {
+			err_hw("[F%d]free_head(NULL)", frame->fcount);
+			ret = -EINVAL;
+			goto p_err;
+		}
 
-	hw_frame->instance = instance;
+		hw_frame->groupmgr	= frame->groupmgr;
+		hw_frame->group		= frame->group;
+		hw_frame->shot		= frame->shot;
+		hw_frame->shot_ext	= frame->shot_ext;
+		hw_frame->kvaddr_shot	= frame->kvaddr_shot;
+		hw_frame->dvaddr_shot	= frame->dvaddr_shot;
+		hw_frame->shot_size	= frame->shot_size;
+		hw_frame->fcount	= frame->fcount;
+		hw_frame->rcount	= frame->rcount;
+		hw_frame->bak_flag      = GET_OUT_FLAG_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, frame->bak_flag);
+		hw_frame->out_flag      = GET_OUT_FLAG_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, frame->out_flag);
+		hw_frame->core_flag	= 0;
+		atomic_set(&hw_frame->shot_done_flag, 1);
+		for (i = 0; i < FIMC_IS_MAX_PLANES; i++) {
+			hw_frame->dvaddr_buffer[i] = frame->dvaddr_buffer[i];
+			hw_frame->kvaddr_buffer[i] = frame->kvaddr_buffer[i];
+		}
+		hw_frame->instance = instance;
+
+		if (j < frame->num_buffers)
+			hw_frame->type = SHOT_TYPE_MULTI;
+		else /* last buffer */
+			hw_frame->type = frame->type;
+
+		hw_frame->planes	= 1;
+		hw_frame->num_buffers	= 1;
+		hw_frame->cur_buf_index	= j - 1;
+		put_frame(framemgr, hw_frame, FS_HW_REQUEST);
+	}
+
+p_err:
+	return ret;
 }
 
 static inline void mshot_schedule(struct fimc_is_hw_ip *hw_ip)
@@ -803,7 +814,7 @@ int fimc_is_hardware_probe(struct fimc_is_hardware *hardware,
 		hardware->sensor_position[i] = 0;
 	}
 
-	for (i = 0; i < SENSOR_POSITION_MAX; i++)
+	for (i = 0; i < SENSOR_POSITION_END; i++)
 		atomic_set(&hardware->streaming[i], 0);
 
 	atomic_set(&hardware->rsccount, 0);
@@ -1109,16 +1120,13 @@ int fimc_is_hardware_grp_shot(struct fimc_is_hardware *hardware, u32 instance,
 	struct fimc_is_group *group, struct fimc_is_frame *frame, ulong hw_map)
 {
 	int ret = 0;
-	int hw_slot = -1;
+	int i, hw_slot = -1;
 	struct fimc_is_hw_ip *hw_ip = NULL;
 	enum fimc_is_hardware_id hw_id = DEV_HW_END;
 	struct fimc_is_frame *hw_frame;
 	struct fimc_is_framemgr *framemgr;
 	struct fimc_is_group *head, *parent;
 	ulong flags = 0;
-#if defined(MULTI_SHOT_KTHREAD) || defined(MULTI_SHOT_TASKLET)
-	int i;
-#endif
 
 	BUG_ON(!hardware);
 	BUG_ON(!frame);
@@ -1193,7 +1201,24 @@ int fimc_is_hardware_grp_shot(struct fimc_is_hardware *hardware, u32 instance,
 		return -EINVAL;
 	}
 
-	fimc_is_hardware_fill_frame_info(instance, hw_frame, frame);
+	hw_frame->groupmgr	= frame->groupmgr;
+	hw_frame->group		= frame->group;
+	hw_frame->shot		= frame->shot;
+	hw_frame->shot_ext	= frame->shot_ext;
+	hw_frame->kvaddr_shot	= frame->kvaddr_shot;
+	hw_frame->dvaddr_shot	= frame->dvaddr_shot;
+	hw_frame->shot_size	= frame->shot_size;
+	hw_frame->fcount	= frame->fcount;
+	hw_frame->rcount	= frame->rcount;
+	hw_frame->bak_flag	= GET_OUT_FLAG_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, frame->bak_flag);
+	hw_frame->out_flag	= GET_OUT_FLAG_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, frame->out_flag);
+	hw_frame->core_flag	= 0;
+	atomic_set(&hw_frame->shot_done_flag, 1);
+	for (i = 0; i < FIMC_IS_MAX_PLANES; i++) {
+		hw_frame->dvaddr_buffer[i] = frame->dvaddr_buffer[i];
+		hw_frame->kvaddr_buffer[i] = frame->kvaddr_buffer[i];
+	}
+	hw_frame->instance = instance;
 	hw_frame->type = frame->type;
 
 	/* multi-buffer */
@@ -1228,31 +1253,14 @@ int fimc_is_hardware_grp_shot(struct fimc_is_hardware *hardware, u32 instance,
 		}
 	} else {
 #if defined(MULTI_SHOT_KTHREAD) || defined(MULTI_SHOT_TASKLET)
-		put_frame(framemgr, hw_frame, FS_HW_REQUEST);
+		put_frame(framemgr, hw_frame, FS_HW_FREE);
 
-		if (frame->num_buffers > 1) {
-			hw_frame->type = SHOT_TYPE_MULTI;
-			hw_frame->planes = 1;
-			hw_frame->num_buffers = 1;
-			hw_frame->cur_buf_index	= 0;
-
-			for (i = 2; i < frame->num_buffers; i++) {
-				hw_frame = get_frame(framemgr, FS_HW_FREE);
-				if (hw_frame == NULL) {
-					framemgr_x_barrier_irqr(framemgr, 0, flags);
-					err_hw("[F%d]free_head(NULL)", frame->fcount);
-					return -EINVAL;
-				}
-
-				fimc_is_hardware_fill_frame_info(instance, hw_frame, frame);
-				hw_frame->type = SHOT_TYPE_MULTI;
-				hw_frame->planes = 1;
-				hw_frame->num_buffers = 1;
-				hw_frame->cur_buf_index = i - 1;
-
-				put_frame(framemgr, hw_frame, FS_HW_REQUEST);
-			}
-			hw_frame->type = frame->type; /* last buffer */
+		ret = fimc_is_set_mshot_frame(instance, frame, framemgr);
+		if (ret) {
+			framemgr_x_barrier_irqr(framemgr, 0, flags);
+			mserr_hw("[F%d][G:0x%x]fimc_is_set_mshot_frame is fail",
+				instance, hw_ip, frame->fcount, GROUP_ID(head->id));
+			return ret;
 		}
 
 		hw_frame = get_frame(framemgr, FS_HW_REQUEST);
@@ -1994,7 +2002,7 @@ int fimc_is_hardware_open(struct fimc_is_hardware *hardware, u32 hw_id,
 		}
 
 		memset(hw_ip->debug_info, 0x00, sizeof(struct hw_debug_info) * DEBUG_FRAME_COUNT);
-		memset(hw_ip->setfile, 0x00, sizeof(struct fimc_is_hw_ip_setfile) * SENSOR_POSITION_MAX);
+		memset(hw_ip->setfile, 0x00, sizeof(struct fimc_is_hw_ip_setfile) * SENSOR_POSITION_END);
 		hw_ip->applied_scenario = -1;
 		hw_ip->debug_index[0] = 0;
 		hw_ip->debug_index[1] = 0;
@@ -2003,7 +2011,6 @@ int fimc_is_hardware_open(struct fimc_is_hardware *hardware, u32 hw_id,
 		atomic_set(&hw_ip->count.fe, 0);
 		atomic_set(&hw_ip->count.dma, 0);
 		atomic_set(&hw_ip->status.Vvalid, V_BLANK);
-		atomic_set(&hw_ip->run_rsccount, 0);
 		setup_timer(&hw_ip->shot_timer, fimc_is_hardware_shot_timer, (unsigned long)hw_ip);
 		sema_init(&hw_ip->smp_resource, 1);
 
@@ -2116,7 +2123,6 @@ int fimc_is_hardware_close(struct fimc_is_hardware *hardware,u32 hw_id, u32 inst
 		atomic_set(&hw_ip->fcount, 0);
 		atomic_set(&hw_ip->instance, 0);
 		hw_ip->internal_fcount = 0;
-		atomic_set(&hw_ip->run_rsccount, 0);
 
 #if defined(MULTI_SHOT_KTHREAD)
 		fimc_is_hardware_deinit_mshot_thread(hw_ip);
@@ -2393,7 +2399,6 @@ int fimc_is_hardware_frame_done(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 	case IS_SHOT_OVERFLOW:
 	case IS_SHOT_INVALID_FRAMENUMBER:
 	case IS_SHOT_TIMEOUT:
-	case IS_SHOT_CONFIG_LOCK_DELAY:
 		break;
 	default:
 		serr_hw("invalid done_type(%d)", hw_ip, done_type);
@@ -2431,7 +2436,6 @@ int fimc_is_hardware_frame_done(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 		case IS_SHOT_OVERFLOW:
 		case IS_SHOT_INVALID_FRAMENUMBER:
 		case IS_SHOT_TIMEOUT:
-		case IS_SHOT_CONFIG_LOCK_DELAY:
 			break;
 		default:
 			break;
@@ -2471,7 +2475,6 @@ int fimc_is_hardware_frame_done(struct fimc_is_hw_ip *hw_ip, struct fimc_is_fram
 		case IS_SHOT_OVERFLOW:
 		case IS_SHOT_INVALID_FRAMENUMBER:
 		case IS_SHOT_TIMEOUT:
-		case IS_SHOT_CONFIG_LOCK_DELAY:
 			break;
 		default:
 			break;

@@ -534,12 +534,12 @@ int sensor_module_2l2_probe(struct platform_device *pdev)
 
 	for (vc_idx = 0; vc_idx < 2; vc_idx++) {
 		switch (vc_idx) {
-		case VC_BUF_DATA_TYPE_SENSOR_STAT1:
+		case VC_BUF_DATA_TYPE_PDAF:
 			module->vc_max_size[vc_idx].width = S5K2L2_PDAF_MAXWIDTH;
 			module->vc_max_size[vc_idx].height = S5K2L2_PDAF_MAXHEIGHT;
 			module->vc_max_size[vc_idx].element_size = S5K2L2_PDAF_ELEMENT;
 			break;
-		case VC_BUF_DATA_TYPE_GENERAL_STAT1:
+		case VC_BUF_DATA_TYPE_MIPI_STAT:
 			module->vc_max_size[vc_idx].width = S5K2L2_MIPI_MAXWIDTH;
 			module->vc_max_size[vc_idx].height = S5K2L2_MIPI_MAXHEIGHT;
 			module->vc_max_size[vc_idx].element_size = S5K2L2_MIPI_ELEMENT;

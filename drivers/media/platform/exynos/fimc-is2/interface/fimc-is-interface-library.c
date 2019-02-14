@@ -31,7 +31,6 @@
 
 struct fimc_is_lib_support gPtr_lib_support;
 struct mutex gPtr_bin_load_ctrl;
-extern struct fimc_is_lib_vra *g_lib_vra;
 
 /*
  * Log write
@@ -445,6 +444,20 @@ static void free_to_mblk(struct lib_mem_block *mblk, void *kva)
 	spin_unlock_irqrestore(&mblk->lock, flag);
 }
 
+void *fimc_is_alloc_heap(u32 size)
+{
+	struct fimc_is_lib_support *lib = &gPtr_lib_support;
+
+	return alloc_from_mblk(&lib->mb_heap, size);
+}
+
+void fimc_is_free_heap(void *kva)
+{
+	struct fimc_is_lib_support *lib = &gPtr_lib_support;
+
+	return free_to_mblk(&lib->mb_heap, kva);
+}
+
 void *fimc_is_alloc_dma(u32 size)
 {
 	struct fimc_is_lib_support *lib = &gPtr_lib_support;
@@ -824,7 +837,7 @@ int fimc_is_mutex_finish(void *mutex_lib)
 
 	_mutex = (struct mutex *)mutex_lib;
 
-	if (mutex_is_locked(_mutex) == 1)
+	if (atomic_read(&_mutex->count) == 0)
 		mutex_unlock(_mutex);
 
 #ifdef LIB_MEM_TRACK
@@ -921,8 +934,7 @@ int fimc_is_fwrite(const char *pfname, void *pdata, int size)
 			__func__, filename, total_size);
 
 p_err:
-	if (filename != NULL)
-		__putname(filename);
+	__putname(filename);
 
 	return ret;
 }
@@ -1247,21 +1259,6 @@ ulong fimc_is_svc_spin_lock_save(void)
 void fimc_is_svc_spin_unlock_restore(ulong flags)
 {
 	spin_unlock_irqrestore(&svc_slock, flags);
-}
-
-static DEFINE_SPINLOCK(svc_slock_rta);
-ulong fimc_is_svc_spin_lock_save_rta(void)
-{
-	ulong flags = 0;
-
-	spin_lock_irqsave(&svc_slock_rta, flags);
-
-	return flags;
-}
-
-void fimc_is_svc_spin_unlock_restore_rta(ulong flags)
-{
-	spin_unlock_irqrestore(&svc_slock_rta, flags);
 }
 
 int fimc_is_spin_lock_init(void **slock)
@@ -1729,156 +1726,12 @@ bool fimc_is_lib_in_interrupt(void)
 		return false;
 }
 
-static void fimc_is_get_fd_data(u32 instance,
-	struct fd_info *face_data,
-	struct fd_rectangle *fd_in_size)
-{
-	int i;
-	unsigned long flags = 0;
-	struct fimc_is_lib_vra *lib_vra = g_lib_vra;
-
-	if (unlikely(!lib_vra)) {
-		err_lib("lib_vra is NULL");
-		return;
-	}
-
-	spin_lock_irqsave(&lib_vra->ae_fd_slock[instance], flags);
-
-	if (lib_vra->all_face_num[instance] > MAX_FACE_COUNT) {
-		err_lib("Exceed MAX_FACE_COUNT at VRA lib (instance: %d face_num: %d)",
-			instance, lib_vra->all_face_num[instance]);
-		face_data->face_num = 0;
-		spin_unlock_irqrestore(&lib_vra->ae_fd_slock[instance], flags);
-		return;
-	}
-
-	for (i = 0; i < lib_vra->all_face_num[instance]; i++) {
-		face_data->face[i].face_area.top_left.x =
-			lib_vra->out_faces[instance][i].base.rect.left;
-		face_data->face[i].face_area.top_left.y =
-			lib_vra->out_faces[instance][i].base.rect.top;
-		face_data->face[i].face_area.span.width =
-			lib_vra->out_faces[instance][i].base.rect.width;
-		face_data->face[i].face_area.span.height =
-			lib_vra->out_faces[instance][i].base.rect.height;
-
-		face_data->face[i].faceId = lib_vra->out_faces[instance][i].base.unique_id;
-		face_data->face[i].score = lib_vra->out_faces[instance][i].base.score;
-		face_data->face[i].rotation = lib_vra->out_faces[instance][i].base.rotation;
-
-		dbg_lib(3, "fimc_is_get_fd_data: [%d](%d,%d,%d,%d,%d,%d,%d)\n", i,
-			face_data->face[i].face_area.top_left.x,
-			face_data->face[i].face_area.top_left.y,
-			face_data->face[i].face_area.span.width,
-			face_data->face[i].face_area.span.height,
-			face_data->face[i].faceId,
-			face_data->face[i].score,
-			face_data->face[i].rotation);
-	}
-
-	face_data->face_num = lib_vra->all_face_num[instance];
-	face_data->frame_count = lib_vra->out_list_info[instance].fr_ind;
-
-	fd_in_size->width = lib_vra->out_list_info[instance].in_sizes.width;
-	fd_in_size->height = lib_vra->out_list_info[instance].in_sizes.height;
-
-	dbg_lib(3, "fimc_is_get_fd_data: (%d,%d,%d,%d)\n",
-		face_data->face_num,
-		face_data->frame_count,
-		fd_in_size->width,
-		fd_in_size->height);
-
-	spin_unlock_irqrestore(&lib_vra->ae_fd_slock[instance], flags);
-
-}
-
-static void fimc_is_get_hybrid_fd_data(u32 instance,
-	struct fd_info *face_data,
-	struct fd_rectangle *fd_in_size)
-{
-#ifdef ENABLE_HYBRID_FD
-	int i;
-	unsigned long flags = 0;
-#endif
-	struct fimc_is_lib_vra *lib_vra = g_lib_vra;
-
-	if (unlikely(!lib_vra)) {
-		err_lib("lib_vra is NULL");
-		return;
-	}
-
-#ifdef ENABLE_HYBRID_FD
-	if (lib_vra->post_detection_enable[instance]) {
-		struct fimc_is_lib_support *lib = &gPtr_lib_support;
-		u32 offset_region;
-		struct is_region *is_region;
-		struct is_fdae_info *fdae_info;
-
-		offset_region = instance * PARAM_REGION_SIZE;
-		is_region = (struct is_region *)(lib->minfo->kvaddr_region + offset_region);
-		fdae_info = &is_region->fdae_info;
-
-		spin_lock_irqsave(&fdae_info->slock, flags);
-
-		if (fdae_info->face_num > MAX_FACE_COUNT) {
-			err_lib("Exceed MAX_FACE_COUNT at HFD (instance: %d face_num: %d)",
-				instance, fdae_info->face_num);
-			face_data->face_num = 0;
-			spin_unlock_irqrestore(&fdae_info->slock, flags);
-			return;
-		}
-
-		for (i = 0; i < fdae_info->face_num; i++) {
-			face_data->face[i].face_area.top_left.x =
-				fdae_info->rect[i].offset_x;
-			face_data->face[i].face_area.top_left.y =
-				fdae_info->rect[i].offset_y;
-			face_data->face[i].face_area.span.width =
-				fdae_info->rect[i].width - fdae_info->rect[i].offset_x;
-			face_data->face[i].face_area.span.height =
-				fdae_info->rect[i].height - fdae_info->rect[i].offset_y;
-
-			face_data->face[i].faceId = fdae_info->id[i];
-			face_data->face[i].score = fdae_info->score[i];
-			face_data->face[i].rotation =
-				(fdae_info->rot[i] * 2 + fdae_info->is_rot[i]) * 45;
-
-			dbg_lib(3, "fimc_is_get_fd_data: [%d](%d,%d,%d,%d,%d,%d,%d)\n", i,
-				face_data->face[i].face_area.top_left.x,
-				face_data->face[i].face_area.top_left.y,
-				face_data->face[i].face_area.span.width,
-				face_data->face[i].face_area.span.height,
-				face_data->face[i].faceId,
-				face_data->face[i].score,
-				face_data->face[i].rotation);
-		}
-
-		face_data->face_num = (0x1 << 16) | (fdae_info->face_num & 0xFFFF);
-		face_data->frame_count = fdae_info->frame_count;
-
-		fd_in_size->width = lib_vra->pdt_out_list_info[instance].in_sizes.width;
-		fd_in_size->height = lib_vra->pdt_out_list_info[instance].in_sizes.height;
-
-		dbg_lib(3, "fimc_is_get_fd_data: (%d,%d,%d,%d)\n",
-			face_data->face_num,
-			face_data->frame_count,
-			fd_in_size->width,
-			fd_in_size->height);
-
-		spin_unlock_irqrestore(&fdae_info->slock, flags);
-	} else
-#endif
-	{
-		face_data->face_num = 0;
-	}
-}
-
 void set_os_system_funcs(os_system_func_t *funcs)
 {
 	funcs[0] = (os_system_func_t)fimc_is_log_write_console;
 
-	funcs[1] = NULL;
-	funcs[2] = NULL;
+	funcs[1] = (os_system_func_t)fimc_is_alloc_heap;
+	funcs[2] = (os_system_func_t)fimc_is_free_heap;
 
 	funcs[3] = (os_system_func_t)fimc_is_assert;
 
@@ -1929,15 +1782,12 @@ void set_os_system_funcs(os_system_func_t *funcs)
 	funcs[41] = (os_system_func_t)fimc_is_spin_unlock_irq;
 	funcs[42] = (os_system_func_t)fimc_is_spin_lock_irqsave;
 	funcs[43] = (os_system_func_t)fimc_is_spin_unlock_irqrestore;
-	funcs[44] = NULL;
-	funcs[45] = NULL;
+	funcs[44] = (os_system_func_t)fimc_is_alloc_heap;
+	funcs[45] = (os_system_func_t)fimc_is_free_heap;
 	funcs[46] = (os_system_func_t)get_reg_addr;
 
 	funcs[47] = (os_system_func_t)fimc_is_lib_in_interrupt;
 	funcs[48] = (os_system_func_t)fimc_is_lib_flush_task_handler;
-
-	funcs[49] = (os_system_func_t)fimc_is_get_fd_data; /* for FDAE/FDAF */
-	funcs[50] = (os_system_func_t)fimc_is_get_hybrid_fd_data; /* for FDAE/FDAF */
 
 	/* TODO: re-odering function table */
 	funcs[99] = (os_system_func_t)fimc_is_event_write;
@@ -1983,8 +1833,8 @@ void set_os_system_funcs_for_rta(os_system_func_t *funcs)
 #endif
 
 	/* Index 10 => memory : alloc/free */
-	funcs[10] = NULL;
-	funcs[11] = NULL;
+	funcs[10] = (os_system_func_t)fimc_is_alloc_heap;
+	funcs[11] = (os_system_func_t)fimc_is_free_heap;
 
 	/* Index 20 => memory : misc */
 
@@ -2015,8 +1865,6 @@ void set_os_system_funcs_for_rta(os_system_func_t *funcs)
 	/* Index 70 => locking : mutex */
 
 	/* Index 80 => locking : spinlock */
-	funcs[80] = (os_system_func_t)fimc_is_svc_spin_lock_save_rta;
-	funcs[81] = (os_system_func_t)fimc_is_svc_spin_unlock_restore_rta;
 
 	/* Index 90 => misc */
 	funcs[90] = (os_system_func_t)fimc_is_get_usec;
@@ -2095,12 +1943,10 @@ int fimc_is_memory_attribute_nxrw(struct fimc_is_memory_attribute *attribute)
 	return 0;
 
 memory_excutable:
-	ret = fimc_is_memory_attribute_change(attribute->vaddr,
+	fimc_is_memory_attribute_change(attribute->vaddr,
 			attribute->numpages,
 			__pgprot(0),
 			__pgprot(PTE_PXN));
-	if (ret)
-		err_lib("memory attribute change fail [PTE_PXN -> PTE_PX]\n");
 
 	return -ENOMEM;
 }
@@ -2186,7 +2032,7 @@ int fimc_is_load_ddk_bin(int loadType)
 	setup_binary_loader(&bin, 3, -EAGAIN, NULL, NULL);
 #ifdef CAMERA_FW_LOADING_FROM
 	ret = fimc_is_vender_request_binary(&bin, FIMC_IS_ISP_LIB_SDCARD_PATH, FIMC_IS_FW_DUMP_PATH,
-						gPtr_lib_support.fw_name, device);
+						FIMC_IS_ISP_LIB, device);
 #else
 	ret = request_binary(&bin, FIMC_IS_ISP_LIB_SDCARD_PATH,
 						FIMC_IS_ISP_LIB, device);
@@ -2200,9 +2046,7 @@ int fimc_is_load_ddk_bin(int loadType)
 		info_lib("binary info[%s] - type: C/D, from: %s\n",
 			bin_type,
 			was_loaded_by(&bin) ? "built-in" : "user-provided");
-		memcpy((void *)lib_addr, bin.data + CDH_SIZE, bin.size - CDH_SIZE);
-		__flush_dcache_area((void *)lib_addr, bin.size - CDH_SIZE);
-		flush_icache_range(lib_addr, bin.size);
+		memcpy((void *)lib_addr, bin.data, bin.size);
 #ifdef CONFIG_UH_RKP
 #ifdef CONFIG_KNOX_KAP
 		if (boot_mode_security)
@@ -2215,22 +2059,17 @@ int fimc_is_load_ddk_bin(int loadType)
 			bin_type,
 			was_loaded_by(&bin) ? "built-in" : "user-provided");
 		memcpy((void *)lib_addr + CAMERA_BINARY_VRA_DATA_OFFSET,
-			bin.data + CAMERA_BINARY_VRA_DATA_OFFSET + CDH_SIZE,
-			CAMERA_BINARY_VRA_DATA_SIZE - CDH_SIZE);
-		__flush_dcache_area((void *)lib_addr + CAMERA_BINARY_VRA_DATA_OFFSET,
-							CAMERA_BINARY_VRA_DATA_SIZE - CDH_SIZE);
-
+			bin.data + CAMERA_BINARY_VRA_DATA_OFFSET,
+			CAMERA_BINARY_VRA_DATA_SIZE);
 		info_lib("binary info[%s] - type: D, from: %s\n",
 			bin_type,
 			was_loaded_by(&bin) ? "built-in" : "user-provided");
 		memcpy((void *)lib_addr + CAMERA_BINARY_DDK_DATA_OFFSET,
-			bin.data + CAMERA_BINARY_DDK_DATA_OFFSET + CDH_SIZE,
-			(bin.size - CAMERA_BINARY_DDK_DATA_OFFSET - CDH_SIZE));
-		__flush_dcache_area((void *)lib_addr + CAMERA_BINARY_DDK_DATA_OFFSET,
-							bin.size - CAMERA_BINARY_DDK_DATA_OFFSET - CDH_SIZE);
+			bin.data + CAMERA_BINARY_DDK_DATA_OFFSET,
+			(bin.size - CAMERA_BINARY_DDK_DATA_OFFSET));
 	}
 
-	fimc_is_ischain_version(FIMC_IS_BIN_DDK_LIBRARY, bin.data + CDH_SIZE, bin.size - CDH_SIZE);
+	fimc_is_ischain_version(FIMC_IS_BIN_DDK_LIBRARY, bin.data, bin.size);
 	release_binary(&bin);
 
 #if !defined(USE_TZ_CONTROLLED_MEM_ATTRIBUTE)
@@ -2249,7 +2088,6 @@ int fimc_is_load_ddk_bin(int loadType)
 #endif
 #endif
 
-	gPtr_lib_support.log_ptr = 0;
 	set_os_system_funcs(os_system_funcs);
 	/* call start_up function for DDK binary */
 #ifdef ENABLE_FPSIMD_FOR_USER
@@ -2296,9 +2134,6 @@ int fimc_is_load_vra_bin(int loadType)
 			lib_vra, bin.size,
 			was_loaded_by(&bin) ? "built-in" : "user-provided");
 	memcpy((void *)lib_vra, bin.data, bin.size);
-	__flush_dcache_area((void *)lib_vra, bin.size);
-	flush_icache_range(lib_vra, bin.size);
-
 	release_binary(&bin);
 
 	ret = fimc_is_memory_attribute_rox(&memory_attribute[INDEX_VRA_BIN]);
@@ -2338,7 +2173,7 @@ int fimc_is_load_rta_bin(int loadType)
 	setup_binary_loader(&bin, 3, -EAGAIN, NULL, NULL);
 #ifdef CAMERA_FW_LOADING_FROM
 	ret = fimc_is_vender_request_binary(&bin, FIMC_IS_ISP_LIB_SDCARD_PATH, FIMC_IS_FW_DUMP_PATH,
-						gPtr_lib_support.rta_fw_name, device);
+						FIMC_IS_RTA_LIB, device);
 #else
 	ret = request_binary(&bin, FIMC_IS_ISP_LIB_SDCARD_PATH,
 						FIMC_IS_RTA_LIB, device);
@@ -2352,8 +2187,6 @@ int fimc_is_load_rta_bin(int loadType)
 		info_lib("binary info[RTA] - type: C/D, from: %s\n",
 			was_loaded_by(&bin) ? "built-in" : "user-provided");
 		memcpy((void *)lib_rta, bin.data, bin.size);
-		__flush_dcache_area((void *)lib_rta, bin.size);
-		flush_icache_range(lib_rta, bin.size);
 #ifdef CONFIG_UH_RKP
 #ifdef CONFIG_KNOX_KAP
 		if (boot_mode_security)
@@ -2367,8 +2200,6 @@ int fimc_is_load_rta_bin(int loadType)
 			was_loaded_by(&bin) ? "built-in" : "user-provided");
 		memcpy((void *)lib_rta + CAMERA_BINARY_RTA_DATA_OFFSET, bin.data + CAMERA_BINARY_RTA_DATA_OFFSET,
 			(bin.size - CAMERA_BINARY_RTA_DATA_OFFSET));
-		__flush_dcache_area((void *)lib_rta + CAMERA_BINARY_RTA_DATA_OFFSET,
-							bin.size - CAMERA_BINARY_RTA_DATA_OFFSET);
 	}
 
 	fimc_is_ischain_version(FIMC_IS_BIN_RTA_LIBRARY, bin.data, bin.size);
@@ -2408,20 +2239,13 @@ int fimc_is_load_bin(void)
 		return ret;
 	}
 
+	spin_lock_init(&lib->slock_debug);
+
 	fimc_is_load_ctrl_lock();
 #ifdef USE_TZ_CONTROLLED_MEM_ATTRIBUTE
-	if (gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_DDK_DONE) {
-		ret = fimc_is_load_ddk_bin(BINARY_LOAD_DATA);
-	} else {
-		info_lib("DDK C/D binary reload start\n");
-		ret = fimc_is_load_ddk_bin(BINARY_LOAD_ALL);
-		if (ret == 0)
-			gPtr_lib_support.binary_code_load_flg |= BINARY_LOAD_DDK_DONE;
-	}
+	ret = fimc_is_load_ddk_bin(BINARY_LOAD_DATA);
 #else
 	ret = fimc_is_load_ddk_bin(BINARY_LOAD_ALL);
-	if (ret == 0)
-		gPtr_lib_support.binary_code_load_flg |= BINARY_LOAD_DDK_DONE;
 #endif
 	if (ret) {
 		err_lib("load_ddk_bin() failed (%d)\n", ret);
@@ -2439,20 +2263,12 @@ int fimc_is_load_bin(void)
 		fimc_is_load_ctrl_unlock();
 		return ret;
 	}
+	lib->log_ptr = 0;
 
 #ifdef USE_TZ_CONTROLLED_MEM_ATTRIBUTE
-	if (gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_RTA_DONE) {
-		ret = fimc_is_load_rta_bin(BINARY_LOAD_DATA);
-	} else {
-		info_lib("RTA C/D binary reload start\n");
-		ret = fimc_is_load_rta_bin(BINARY_LOAD_ALL);
-		if (ret == 0)
-			gPtr_lib_support.binary_code_load_flg |= BINARY_LOAD_RTA_DONE;
-	}
+	ret = fimc_is_load_rta_bin(BINARY_LOAD_DATA);
 #else
 	ret = fimc_is_load_rta_bin(BINARY_LOAD_ALL);
-	if (ret == 0)
-		gPtr_lib_support.binary_code_load_flg |= BINARY_LOAD_RTA_DONE;
 #endif
 	if (ret) {
 		err_lib("load_rta_bin() failed (%d)\n", ret);
@@ -2468,7 +2284,12 @@ int fimc_is_load_bin(void)
 	}
 	dbg_lib(3, "lib_support_init success!!\n");
 
+	spin_lock_init(&svc_slock);
+
 	lib->binary_load_flg = true;
+
+	if (lib->minfo->pb_lib)
+		mblk_init(&lib->mb_heap, lib->minfo->pb_lib, MT_TYPE_MB_HEAP, "HEAP");
 
 	if (lib->minfo->pb_taaisp)
 		mblk_init(&lib->mb_dma, lib->minfo->pb_taaisp, MT_TYPE_MB_DMA, "DMA");
@@ -2487,8 +2308,6 @@ int fimc_is_load_bin(void)
 void fimc_is_load_ctrl_init(void)
 {
 	mutex_init(&gPtr_bin_load_ctrl);
-	spin_lock_init(&gPtr_lib_support.slock_debug);
-	gPtr_lib_support.binary_code_load_flg = 0;
 }
 
 void fimc_is_load_ctrl_lock(void)
@@ -2503,41 +2322,17 @@ void fimc_is_load_ctrl_unlock(void)
 
 int fimc_is_load_bin_on_boot(void)
 {
-	struct fimc_is_lib_support *lib = &gPtr_lib_support;
-	int ret = 0;
+	int ret;
 
-	spin_lock_init(&svc_slock);
-
-	spin_lock_init(&lib->slock_debug);
-
-	if (!(gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_DDK_DONE)) {
-		ret = fimc_is_load_ddk_bin(BINARY_LOAD_ALL);
-		if (ret)
-			err_lib("fimc_is_load_ddk_bin is fail(%d)", ret);
-		else
-			gPtr_lib_support.binary_code_load_flg |= BINARY_LOAD_DDK_DONE;
+	ret = fimc_is_load_ddk_bin(BINARY_LOAD_ALL);
+	if (ret) {
+		err_lib("fimc_is_load_ddk_bin is fail(%d)", ret);
 	}
 
-	if (!(gPtr_lib_support.binary_code_load_flg & BINARY_LOAD_RTA_DONE)) {
-		ret = fimc_is_load_rta_bin(BINARY_LOAD_ALL);
-		if (ret)
-			err_lib("fimc_is_load_rta_bin is fail(%d)", ret);
-		else
-			gPtr_lib_support.binary_code_load_flg |= BINARY_LOAD_RTA_DONE;
+	ret = fimc_is_load_rta_bin(BINARY_LOAD_ALL);
+	if (ret) {
+		err_lib("fimc_is_load_rta_bin is fail(%d)", ret);
 	}
 
 	return ret;
-}
-
-int fimc_is_set_fw_names(char *fw_name, char *rta_fw_name)
-{
-	if (fw_name == NULL || rta_fw_name == NULL) {
-		err_lib("%s %p %p fail. ", __func__, fw_name, rta_fw_name);
-		return -1;
-	}
-
-	memcpy(gPtr_lib_support.fw_name, fw_name, sizeof(gPtr_lib_support.fw_name));
-	memcpy(gPtr_lib_support.rta_fw_name, rta_fw_name, sizeof(gPtr_lib_support.rta_fw_name));
-
-	return 0;
 }

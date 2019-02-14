@@ -176,7 +176,6 @@ static int fimc_is_gframe_check(struct fimc_is_group *gprev,
 
 	device = group->device;
 
-#ifndef DISABLE_CHECK_PERFRAME_FMT_SIZE
 	/*
 	 * perframe check
 	 * 1. perframe size can't exceed s_format size
@@ -191,7 +190,6 @@ static int fimc_is_gframe_check(struct fimc_is_group *gprev,
 		frame->shot_ext->node_group.leader.input.cropRegion[2] = incrop->w;
 		frame->shot_ext->node_group.leader.input.cropRegion[3] = incrop->h;
 	}
-#endif
 
 	for (capture_id = 0; capture_id < CAPTURE_NODE_MAX; ++capture_id) {
 		node = &gframe->group_cfg[group->slot].capture[capture_id];
@@ -208,7 +206,6 @@ static int fimc_is_gframe_check(struct fimc_is_group *gprev,
 			goto p_err;
 		}
 
-#ifndef DISABLE_CHECK_PERFRAME_FMT_SIZE
 		if ((otcrop->w * otcrop->h) > (subdev->output.width * subdev->output.height)) {
 			mrwarn("[V%d][req:%d] the output size is invalid(perframe:%dx%d > subdev:%dx%d)", group, gframe,
 				node->vid, node->request,
@@ -218,7 +215,7 @@ static int fimc_is_gframe_check(struct fimc_is_group *gprev,
 			frame->shot_ext->node_group.capture[capture_id].output.cropRegion[2] = otcrop->w;
 			frame->shot_ext->node_group.capture[capture_id].output.cropRegion[3] = otcrop->h;
 		}
-#endif
+
 		subdev->cid = capture_id;
 	}
 
@@ -1858,10 +1855,7 @@ p_err:
 	return ret;
 }
 
-static void set_group_shots(struct fimc_is_group *group,
-	u32 hal_version,
-	u32 framerate,
-	enum fimc_is_ex_mode ex_mode)
+void set_group_shots(struct fimc_is_group *group, u32 hal_version, u32 framerate)
 {
 #ifdef ENABLE_IS_CORE
 	if (hal_version == IS_HAL_VER_3_2) {
@@ -1902,18 +1896,13 @@ static void set_group_shots(struct fimc_is_group *group,
 		group->skip_shots = group->asyn_shots;
 	}
 #else
-	if (ex_mode == EX_DUALFPS) {
-		group->asyn_shots = MIN_OF_ASYNC_SHOTS + 1;
-		group->sync_shots = MIN_OF_SYNC_SHOTS;
-	} else {
 #ifdef REDUCE_COMMAND_DELAY
-		group->asyn_shots = MIN_OF_ASYNC_SHOTS + 1;
-		group->sync_shots = 0;
+	group->asyn_shots = MIN_OF_ASYNC_SHOTS + 1;
+	group->sync_shots = 0;
 #else
-		group->asyn_shots = MIN_OF_ASYNC_SHOTS + 0;
-		group->sync_shots = MIN_OF_SYNC_SHOTS;
+	group->asyn_shots = MIN_OF_ASYNC_SHOTS;
+	group->sync_shots = MIN_OF_SYNC_SHOTS;
 #endif
-	}
 	group->init_shots = group->asyn_shots;
 	group->skip_shots = group->asyn_shots;
 #endif
@@ -1931,7 +1920,7 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group_task *gtask;
 	u32 sensor_fcount;
 	u32 framerate;
-	enum fimc_is_ex_mode ex_mode;
+	u32 shot_inc;
 
 	BUG_ON(!groupmgr);
 	BUG_ON(!group);
@@ -1974,11 +1963,10 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 	} else {
 		sensor = device->sensor;
 		framerate = fimc_is_sensor_g_framerate(sensor);
-		ex_mode = fimc_is_sensor_g_ex_mode(sensor);
 
 		if (test_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state)) {
 			resourcemgr = device->resourcemgr;
-			set_group_shots(group, resourcemgr->hal_version, framerate, ex_mode);
+			set_group_shots(group, resourcemgr->hal_version, framerate);
 
 			/* frame count */
 			sensor_fcount = fimc_is_sensor_g_fcount(sensor) + 1;
@@ -1989,8 +1977,14 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 			memset(&group->intent_ctl, 0, sizeof(struct camera2_aa_ctl));
 
 			/* shot resource */
-			sema_init(&gtask->smp_resource, group->asyn_shots + group->sync_shots);
-			smp_shot_init(group, group->asyn_shots + group->sync_shots);
+			if ((group->init_shots + group->sync_shots) > smp_shot_get(group)) {
+				shot_inc = (group->init_shots + group->sync_shots) - smp_shot_get(group);
+				while (shot_inc > 0) {
+					up(&gtask->smp_resource);
+					smp_shot_inc(group);
+					shot_inc--;
+				}
+			}
 		} else {
 			if (framerate > 120)
 				group->asyn_shots = MIN_OF_ASYNC_SHOTS_240FPS;
@@ -2305,6 +2299,9 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
 	cis_shared_data *cis_data = NULL;
 #endif
+	u32 orientation;
+	enum mcsc_port backup_mcsc_blk_port[INTERFACE_TYPE_MAX];
+	int i = 0;
 
 	BUG_ON(!groupmgr);
 	BUG_ON(!group);
@@ -2359,6 +2356,15 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 					panic("HAL panic for request bufs");
 				}
 		}
+
+		/* orientation is set by user */
+		orientation = frame->shot->uctl.scalerUd.orientation;
+		for (i = 0; i < INTERFACE_TYPE_MAX; i++)
+			backup_mcsc_blk_port[i] = frame->shot->uctl.scalerUd.mcsc_sub_blk_port[i];
+		memset(&frame->shot->uctl.scalerUd, 0, sizeof(struct camera2_scaler_uctl));
+		frame->shot->uctl.scalerUd.orientation = orientation;
+		for (i = 0; i < INTERFACE_TYPE_MAX; i++)
+			frame->shot->uctl.scalerUd.mcsc_sub_blk_port[i] = backup_mcsc_blk_port[i];
 
 		frame->lindex = 0;
 		frame->hindex = 0;
@@ -2416,21 +2422,6 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 			}
 		}
 #endif
-
-#ifdef ENABLE_REMOSAIC_CAPTURE_WITH_ROTATION
-		if ((GET_DEVICE_TYPE_BY_GRP(group->id) == FIMC_IS_DEVICE_SENSOR)
-			&& (device->sensor && !test_bit(FIMC_IS_SENSOR_FRONT_START, &device->sensor->state))) {
-			device->sensor->mode_chg_frame = NULL;
-
-			if (CHK_REMOSAIC_SCN(frame->shot->ctl.aa.sceneMode)) {
-				clear_bit(FIMC_IS_SENSOR_OTF_OUTPUT, &device->sensor->state);
-				device->sensor->mode_chg_frame = frame;
-			} else {
-				if (group->child)
-					set_bit(FIMC_IS_SENSOR_OTF_OUTPUT, &device->sensor->state);
-			}
-		}
-#endif
 		trans_frame(framemgr, frame, FS_REQUEST);
 	} else {
 		err("frame(%d) is invalid state(%d)\n", index, frame->state);
@@ -2443,47 +2434,36 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 #ifdef CONFIG_COMPANION_DIRECT_USE
 	if (test_bit(FIMC_IS_SENSOR_PREPROCESSOR_AVAILABLE, &sensor_peri->peri_state)) {
 		/* PAF */
-		if (cis_data->is_data.paf_stat_enable == false) {
-			frame->shot->uctl.isModeUd.paf_mode = CAMERA_PAF_OFF;
+		if (cis_data->companion_data.paf_stat_enable == false) {
+			frame->shot->uctl.companionUd.paf_mode = COMPANION_PAF_OFF;
 		}
 
 		/* CAF */
-		if (cis_data->is_data.caf_stat_enable == false) {
-			frame->shot->uctl.isModeUd.caf_mode = CAMERA_PAF_OFF;
+		if (cis_data->companion_data.caf_stat_enable == false) {
+			frame->shot->uctl.companionUd.caf_mode = COMPANION_CAF_OFF;
 		}
 
 		/* WDR */
-		if (cis_data->is_data.wdr_enable == false) {
-			frame->shot->uctl.isModeUd.wdr_mode = CAMERA_WDR_OFF;
+		if (cis_data->companion_data.wdr_enable == false) {
+			frame->shot->uctl.companionUd.wdr_mode = COMPANION_WDR_OFF;
 		}
 	}
 #endif
 #if defined (USE_AP_PDAF)
 	/* PAF */
-	if ((cis_data->is_data.paf_stat_enable == false) &&
-		(sensor_peri->cis.use_pdaf == true )) {
-		frame->shot->uctl.isModeUd.paf_mode = CAMERA_PAF_OFF;
+	if ((cis_data->companion_data.paf_stat_enable == false) &&
+		(sensor_peri->cis.use_pdaf == true )){
+		frame->shot->uctl.companionUd.paf_mode = COMPANION_PAF_OFF;
 	}
-#else
-	frame->shot->uctl.isModeUd.paf_mode = CAMERA_PAF_OFF;
 #endif
 #if defined(USE_SENSOR_WDR)
 	/* WDR */
-	if ((cis_data->is_data.wdr_enable == false) &&
+	if ((cis_data->companion_data.wdr_enable == false) &&
 		(sensor->position == SENSOR_POSITION_REAR)){
-		frame->shot->uctl.isModeUd.wdr_mode = CAMERA_WDR_OFF;
+		frame->shot->uctl.companionUd.wdr_mode = COMPANION_WDR_OFF;
 	}
 #else
-#ifdef USE_WDR_INTERFACE
-	if ((frame->shot->uctl.isModeUd.wdr_mode != CAMERA_WDR_ON) &&
-		(frame->shot->uctl.isModeUd.wdr_mode != CAMERA_WDR_AUTO) &&
-		(frame->shot->uctl.isModeUd.wdr_mode != CAMERA_WDR_AUTO_LIKE))
-	{
-		frame->shot->uctl.isModeUd.wdr_mode = CAMERA_WDR_OFF;
-	}
-#else
-	frame->shot->uctl.isModeUd.wdr_mode = CAMERA_WDR_OFF;
-#endif
+	frame->shot->uctl.companionUd.wdr_mode = COMPANION_WDR_OFF;
 #endif
 	fimc_is_group_start_trigger(groupmgr, group, frame);
 
@@ -2987,7 +2967,7 @@ p_skip_sync:
 		int mif_qos;
 		struct fimc_is_core *core = (struct fimc_is_core *)platform_get_drvdata(device->pdev);
 #endif
-
+		
 		mutex_lock(&resourcemgr->dvfs_ctrl.lock);
 
 		/* try to find dynamic scenario to apply */
@@ -3128,14 +3108,6 @@ int fimc_is_group_done(struct fimc_is_groupmgr *groupmgr,
 				frame->shot->udm.ni.nextNextFrameNoiseIndex;
 		}
 
-#ifdef ENABLE_INIT_AWB
-		/* wb gain backup for initial AWB */
-		if (device->sensor && ((child == &device->group_isp) || (child->subdev[ENTRY_ISP])))
-			memcpy(device->sensor->last_wb, frame->shot->dm.color.gains,
-				sizeof(float) * WB_GAIN_COUNT);
-#endif
-
-#if !defined(FAST_FDAE)
 		if ((child == &device->group_vra) || (child->subdev[ENTRY_VRA])) {
 #ifdef ENABLE_FD_SW
 			fimc_is_vra_trigger(device, &group->leader, frame);
@@ -3144,7 +3116,6 @@ int fimc_is_group_done(struct fimc_is_groupmgr *groupmgr,
 			memcpy(&device->fdUd, &frame->shot->dm.stats,
 				sizeof(struct camera2_fd_uctl));
 		}
-#endif
 		child = child->child;
 	}
 #endif

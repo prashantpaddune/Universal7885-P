@@ -674,8 +674,6 @@ int fimc_is_debug_dma_dump(struct fimc_is_queue *queue, u32 index, u32 vid, u32 
 		}
 
 		info("[V%d][F%d] img dumped..(%s, %d)\n", vid, framecount, filename, total_size);
-		__putname(filename);
-
 		break;
 	case DBG_DMA_DUMP_META:
 		filename = __getname();
@@ -701,8 +699,6 @@ int fimc_is_debug_dma_dump(struct fimc_is_queue *queue, u32 index, u32 vid, u32 
 		}
 
 		info("[V%d][F%d] meta dumped..(%s, %d)\n", vid, framecount, filename, total_size);
-		__putname(filename);
-
 		break;
 	default:
 		err("invalid type(%d)", type);

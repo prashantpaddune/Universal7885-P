@@ -56,7 +56,7 @@ struct fimc_is_priv_buf_ops {
 };
 
 struct fimc_is_priv_buf {
-	struct vb2_ion_cookie	*cookie;
+	void	*cookie;
 	size_t	size;
 	size_t	align;
 	void	*ctx;
@@ -131,8 +131,7 @@ struct fimc_is_minfo {
 	struct fimc_is_priv_buf *pb_fshared;
 	struct fimc_is_priv_buf *pb_dregion;
 	struct fimc_is_priv_buf *pb_pregion;
-	struct fimc_is_priv_buf *pb_heap_rta; /* RTA HEAP */
-	struct fimc_is_priv_buf *pb_heap_ddk; /* DDK HEAP */
+	struct fimc_is_priv_buf *pb_lib;
 	struct fimc_is_priv_buf *pb_taaisp;
 	struct fimc_is_priv_buf *pb_lhfd;
 	struct fimc_is_priv_buf *pb_vra;

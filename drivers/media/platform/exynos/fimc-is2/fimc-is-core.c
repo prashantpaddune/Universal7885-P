@@ -34,6 +34,8 @@
 #include <linux/v4l2-mediabus.h>
 #include <linux/gpio.h>
 
+#include <linux/memblock.h>
+
 #ifdef CONFIG_OF
 #include <linux/of.h>
 #include <linux/of_gpio.h>
@@ -107,6 +109,101 @@ int debug_time_queue;
 module_param(debug_time_queue, int, 0644);
 int debug_time_shot;
 module_param(debug_time_shot, int, 0644);
+
+static struct vm_struct fimc_is_lib_vm;
+static struct vm_struct fimc_is_heap_vm;
+static int __init fimc_is_lib_mem_alloc(char *str)
+{
+	ulong addr = 0;
+
+	if (kstrtoul(str, 0, (ulong *)&addr) || !addr) {
+		probe_warn("invalid fimc-is library memory address, use default");
+		addr = LIB_START;
+	}
+
+	if (addr != LIB_START)
+		probe_warn("use different address [reserve-fimc=0x%lx default:0x%lx]",
+				addr, LIB_START);
+
+	fimc_is_lib_vm.phys_addr = memblock_alloc(LIB_SIZE, SZ_4K);
+	fimc_is_lib_vm.addr = (void *)addr;
+	fimc_is_lib_vm.size = LIB_SIZE + PAGE_SIZE;
+
+	vm_area_add_early(&fimc_is_lib_vm);
+
+	probe_info("fimc-is library memory: 0x%lx\n", addr);
+
+	fimc_is_heap_vm.phys_addr = memblock_alloc(HEAP_SIZE, SZ_4K);
+	fimc_is_heap_vm.addr = (void *)HEAP_START;
+	fimc_is_heap_vm.size = HEAP_SIZE + PAGE_SIZE;
+
+	vm_area_add_early(&fimc_is_heap_vm);
+
+	probe_info("fimc-is heap memory: 0x%lx\n", addr);
+
+	return 0;
+}
+__setup("reserve-fimc=", fimc_is_lib_mem_alloc);
+
+static int __init fimc_is_lib_mem_map(void)
+{
+	int page_size, i;
+	struct page *page;
+	struct page **pages;
+
+	if (!fimc_is_lib_vm.phys_addr) {
+		probe_err("There is no reserve-fimc= at bootargs.");
+		return -ENOMEM;
+	}
+
+	page_size = fimc_is_lib_vm.size / PAGE_SIZE;
+	pages = kzalloc(sizeof(struct page*) * page_size, GFP_KERNEL);
+	page = phys_to_page(fimc_is_lib_vm.phys_addr);
+
+	for (i = 0; i < page_size; i++)
+		pages[i] = page++;
+
+	if (map_vm_area(&fimc_is_lib_vm, PAGE_KERNEL, pages)) {
+		probe_err("failed to mapping between virt and phys for binary");
+		vunmap(fimc_is_lib_vm.addr);
+		kfree(pages);
+		return -ENOMEM;
+	}
+
+	kfree(pages);
+
+	return 0;
+}
+
+static int __init fimc_is_heap_mem_map(void)
+{
+	int page_size, i;
+	struct page *page;
+	struct page **pages;
+
+	if (!fimc_is_heap_vm.phys_addr) {
+		probe_err("There is no reserve-fimc= at bootargs.");
+		return -ENOMEM;
+	}
+
+	page_size = fimc_is_heap_vm.size / PAGE_SIZE;
+	pages = kzalloc(sizeof(struct page*) * page_size, GFP_KERNEL);
+	page = phys_to_page(fimc_is_heap_vm.phys_addr);
+
+	for (i = 0; i < page_size; i++)
+		pages[i] = page++;
+
+	if (map_vm_area(&fimc_is_heap_vm, PAGE_KERNEL, pages)) {
+		probe_err("failed to mapping between virt and phys for binary");
+		vunmap(fimc_is_heap_vm.addr);
+		kfree(pages);
+		return -ENOMEM;
+	}
+
+	kfree(pages);
+
+	return 0;
+}
 
 #ifdef CONFIG_CPU_THERMAL_IPA
 static int fimc_is_mif_throttling_notifier(struct notifier_block *nb,
@@ -275,7 +372,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][3XS] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].sourceAddress[k]);
+									shot->uctl.scalerUd.sourceAddress[k]);
 						}
 					}
 				}
@@ -292,7 +389,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][3XC] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].txcTargetAddress[k]);
+									shot->uctl.scalerUd.txcTargetAddress[k]);
 						}
 					}
 				}
@@ -309,7 +406,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][3XP] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].txpTargetAddress[k]);
+									shot->uctl.scalerUd.txpTargetAddress[k]);
 						}
 					}
 				}
@@ -338,7 +435,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][IXC] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].ixcTargetAddress[k]);
+									shot->uctl.scalerUd.ixcTargetAddress[k]);
 						}
 					}
 				}
@@ -355,7 +452,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][IXP] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].ixpTargetAddress[k]);
+									shot->uctl.scalerUd.ixpTargetAddress[k]);
 						}
 					}
 				}
@@ -384,7 +481,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][SCC] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].sccTargetAddress[k]);
+									shot->uctl.scalerUd.sccTargetAddress[k]);
 						}
 					}
 				}
@@ -401,7 +498,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][SCP] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].scpTargetAddress[k]);
+									shot->uctl.scalerUd.scpTargetAddress[k]);
 						}
 					}
 				}
@@ -418,7 +515,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][MCS] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].scpTargetAddress[k]);
+									shot->uctl.scalerUd.scpTargetAddress[k]);
 						}
 					}
 				}
@@ -435,7 +532,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][M0P] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].sc0TargetAddress[k]);
+									shot->uctl.scalerUd.sc0TargetAddress[k]);
 						}
 					}
 				}
@@ -452,7 +549,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][M1P] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].sc1TargetAddress[k]);
+									shot->uctl.scalerUd.sc1TargetAddress[k]);
 						}
 					}
 				}
@@ -469,7 +566,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][M2P] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].sc2TargetAddress[k]);
+									shot->uctl.scalerUd.sc2TargetAddress[k]);
 						}
 					}
 				}
@@ -486,7 +583,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][M3P] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].sc3TargetAddress[k]);
+									shot->uctl.scalerUd.sc3TargetAddress[k]);
 						}
 					}
 				}
@@ -503,7 +600,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][M4P] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].sc4TargetAddress[k]);
+									shot->uctl.scalerUd.sc4TargetAddress[k]);
 						}
 					}
 				}
@@ -520,7 +617,7 @@ static void __fimc_is_fault_handler(struct device *dev)
 							shot = framemgr->frames[j].shot;
 							if (shot)
 								pr_err("[%d][M5P] BUF[%d][%d] target = 0x%08X\n", i, j, k,
-									framemgr->frames[j].sc5TargetAddress[k]);
+									shot->uctl.scalerUd.sc5TargetAddress[k]);
 						}
 					}
 				}
@@ -1175,6 +1272,18 @@ static int fimc_is_probe(struct platform_device *pdev)
 			probe_err("clk_get is fail(%d)", ret);
 			goto p_err3;
 		}
+	}
+
+	ret = fimc_is_lib_mem_map();
+	if (ret) {
+		probe_err("fimc_is_lib_mem_map is fail(%d)", ret);
+		goto p_err3;
+	}
+
+	ret = fimc_is_heap_mem_map();
+	if (ret) {
+		probe_err("fimc_is_heap_mem_map is fail(%d)", ret);
+		goto p_err3;
 	}
 
 	ret = fimc_is_mem_init(&core->resourcemgr.mem, core->pdev);

@@ -458,7 +458,7 @@ static int fimc_is_ssx_video_s_input(struct file *file, void *priv,
 	unsigned int input)
 {
 	int ret = 0;
-	u32 scenario, stream, position, vindex, intype, leader;
+	u32 scenario, stream, module, vindex, intype, leader;
 	struct fimc_is_video_ctx *vctx = file->private_data;
 	struct fimc_is_device_sensor *device;
 	struct fimc_is_framemgr *framemgr;
@@ -469,13 +469,13 @@ static int fimc_is_ssx_video_s_input(struct file *file, void *priv,
 	framemgr = GET_FRAMEMGR(vctx);
 	scenario = (input & SENSOR_SCN_MASK) >> SENSOR_SCN_SHIFT;
 	stream = (input & INPUT_STREAM_MASK) >> INPUT_STREAM_SHIFT;
-	position = (input & INPUT_POSITION_MASK) >> INPUT_POSITION_SHIFT;
+	module = (input & INPUT_MODULE_MASK) >> INPUT_MODULE_SHIFT;
 	vindex = (input & INPUT_VINDEX_MASK) >> INPUT_VINDEX_SHIFT;
 	intype = (input & INPUT_INTYPE_MASK) >> INPUT_INTYPE_SHIFT;
 	leader = (input & INPUT_LEADER_MASK) >> INPUT_LEADER_SHIFT;
 
 	mdbgv_sensor("%s(input : %08X)[%d,%d,%d,%d,%d,%d]\n", vctx, __func__, input,
-			scenario, stream, position, vindex, intype, leader);
+			scenario, stream, module, vindex, intype, leader);
 
 	ret = fimc_is_video_s_input(file, vctx);
 	if (ret) {
@@ -483,7 +483,7 @@ static int fimc_is_ssx_video_s_input(struct file *file, void *priv,
 		goto p_err;
 	}
 
-	ret = fimc_is_sensor_s_input(device, position, scenario, vindex);
+	ret = fimc_is_sensor_s_input(device, module, scenario, vindex);
 	if (ret) {
 		merr("fimc_is_sensor_s_input is fail(%d)", device, ret);
 		goto p_err;

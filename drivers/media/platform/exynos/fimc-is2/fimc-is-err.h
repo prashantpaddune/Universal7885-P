@@ -88,8 +88,7 @@
 /*DIS(600~700)*/
 #define IS_ERROR_DIS_PWRDN_FAIL         600
 
-/*TDNR(700~800)
-*/
+/*TDNR(700~800)*/
 #define IS_ERROR_TDNR_PWRDN_FAIL        700
 
 /*SCALERP(800~900)*/
@@ -275,7 +274,7 @@ enum ShotErrorType {
 	IS_SHOT_DROP,
 	IS_SHOT_3AA_FRAME_END,
 	IS_SHOT_IP_CLOCK_OFF,
-	IS_SHOT_CONFIG_LOCK_DELAY, /* CONFIG_LOCK was late than FRAME_END. */
+	IS_SHOT_ENDPROC_DELAY,
 	IS_SHOT_UNPROCESSED, /* Shot is coming in advance at PROCESS_STOP command */
 	IS_SHOT_INSUFFICIENT_RESOURCES, /* FrameDescriptor is overflow */
 	IS_SHOT_3AA_ERROR, /* 3AA error except for overflow */

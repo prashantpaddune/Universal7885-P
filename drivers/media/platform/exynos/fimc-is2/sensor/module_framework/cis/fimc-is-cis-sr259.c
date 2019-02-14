@@ -564,9 +564,7 @@ int sensor_sr259_cis_stream_on(struct v4l2_subdev *subdev)
 
 	dbg_sensor(1, "[MOD:D:%d] %s\n", cis->id, __func__);
 
-	ret = sensor_sr259_cis_group_param_hold_func(subdev, 0x00);
-	if (ret < 0)
-		err("group_param_hold_func failed at stream on");
+	sensor_sr259_cis_group_param_hold_func(subdev, 0x00);
 
 	/* page select */
 	ret = fimc_is_sensor_addr8_write8(client, 0x03, 0x00); // page 0 set
@@ -617,9 +615,7 @@ int sensor_sr259_cis_stream_off(struct v4l2_subdev *subdev)
 
 	dbg_sensor(1, "[MOD:D:%d] %s\n", cis->id, __func__);
 
-	ret = sensor_sr259_cis_group_param_hold_func(subdev, 0x00);
-	if (ret < 0)
-		err("group_param_hold_func failed at stream off");
+	sensor_sr259_cis_group_param_hold_func(subdev, 0x00);
 
 	/* page select */
 	ret = fimc_is_sensor_addr8_write8(client, 0x03, 0x00); // page 0 set
@@ -1480,7 +1476,7 @@ int sensor_sr259_cis_set_digital_gain(struct v4l2_subdev *subdev, struct ae_para
 		goto p_err;
 */
 	/* Long digital gain */
-/*	if (cis_data->is_data.wdr_enable == true) {
+/*	if (cis_data->companion_data.enable_wdr == true) {
 		ret = fimc_is_sensor_write16(client, 0x305C, long_gain);
 		if (ret < 0)
 			goto p_err;

@@ -10,7 +10,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/memblock.h>
 #include <linux/slab.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
@@ -32,9 +31,6 @@
 #include <linux/cpuidle.h>
 #include <linux/soc/samsung/exynos-soc.h>
 #include <soc/samsung/bts.h>
-
-#include <linux/of_fdt.h>
-#include <linux/of_reserved_mem.h>
 
 #ifdef CONFIG_EXYNOS_BUSMONITOR
 #include <linux/exynos-busmon.h>
@@ -217,7 +213,6 @@ static int fimc_is_resourcemgr_allocmem(struct fimc_is_resourcemgr *resourcemgr)
 	struct fimc_is_mem *mem = &resourcemgr->mem;
 	struct fimc_is_minfo *minfo = &resourcemgr->minfo;
 	size_t tpu_size = 0;
-	size_t tnr_size;
 
 	minfo->total_size = 0;
 	/* setfile */
@@ -293,22 +288,24 @@ static int fimc_is_resourcemgr_allocmem(struct fimc_is_resourcemgr *resourcemgr)
 	}
 	minfo->total_size += minfo->pb_fshared->size;
 
-#if (TAAISP_DMA_SIZE > 0)
-	tnr_size = 0;
-#if !defined(ENABLE_DYNAMIC_MEM)
-#if defined(ENABLE_TNR)
-	/* 4 is double buffering & 2 instance for dual camera */
-	tnr_size += ((SIZE_TNR_IMAGE_BUF + SIZE_TNR_WEIGHT_BUF) * 4);
+	/* reserved memory for library */
+#if (RESERVE_LIB_SIZE > 0)
+	minfo->pb_lib = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, RESERVE_LIB_SIZE, 16);
+	if (IS_ERR_OR_NULL(minfo->pb_lib)) {
+		err("failed to allocate buffer for library");
+		return -ENOMEM;
+	}
+	minfo->total_size += minfo->pb_lib->size;
 #endif
 
+#if (TAAISP_DMA_SIZE > 0)
 	/* 3aa/isp internal DMA buffer */
-	minfo->pb_taaisp = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, TAAISP_DMA_SIZE + tnr_size, 16);
+	minfo->pb_taaisp = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, TAAISP_DMA_SIZE, 16);
 	if (IS_ERR_OR_NULL(minfo->pb_taaisp)) {
 		err("failed to allocate buffer for TAAISP_DMAE");
 		return -ENOMEM;
 	}
 	minfo->total_size += minfo->pb_taaisp->size;
-#endif
 #endif
 
 #if defined (ENABLE_FD_SW)
@@ -382,6 +379,11 @@ static int fimc_is_resourcemgr_initmem(struct fimc_is_resourcemgr *resourcemgr)
 	resourcemgr->minfo.dvaddr = 0;
 	resourcemgr->minfo.kvaddr = 0;
 
+#if (RESERVE_LIB_SIZE > 0)
+	resourcemgr->minfo.dvaddr_lib = CALL_BUFOP(minfo->pb_lib, dvaddr, minfo->pb_lib);
+	resourcemgr->minfo.kvaddr_lib = CALL_BUFOP(minfo->pb_lib, kvaddr, minfo->pb_lib);
+#endif
+
 	resourcemgr->minfo.dvaddr_debug = CALL_BUFOP(minfo->pb_debug, dvaddr, minfo->pb_debug);
 	resourcemgr->minfo.kvaddr_debug = CALL_BUFOP(minfo->pb_debug, kvaddr, minfo->pb_debug);
 	resourcemgr->minfo.phaddr_debug = CALL_BUFOP(minfo->pb_debug, phaddr, minfo->pb_debug);
@@ -397,10 +399,8 @@ static int fimc_is_resourcemgr_initmem(struct fimc_is_resourcemgr *resourcemgr)
 	resourcemgr->minfo.kvaddr_region = CALL_BUFOP(minfo->pb_pregion, kvaddr, minfo->pb_pregion);
 
 #if (TAAISP_DMA_SIZE > 0)
-#if !defined(ENABLE_DYNAMIC_MEM)
 	resourcemgr->minfo.dvaddr_taaisp = CALL_BUFOP(minfo->pb_taaisp, dvaddr, minfo->pb_taaisp);
 	resourcemgr->minfo.kvaddr_taaisp = CALL_BUFOP(minfo->pb_taaisp, kvaddr, minfo->pb_taaisp);
-#endif
 #endif
 
 #if defined(ENABLE_FD_SW)
@@ -451,248 +451,34 @@ p_err:
 	return ret;
 }
 
-#ifdef ENABLE_DYNAMIC_MEM
-static int fimc_is_resourcemgr_alloc_dynamic_mem(struct fimc_is_resourcemgr *resourcemgr)
-{
-	struct fimc_is_mem *mem = &resourcemgr->mem;
-	struct fimc_is_minfo *minfo = &resourcemgr->minfo;
-	size_t tnr_size;
-
-	tnr_size = 0;
-#if defined (ENABLE_TNR)
-	/* 4 is double buffering & 2 instance for dual camera */
-	tnr_size += ((SIZE_TNR_IMAGE_BUF + SIZE_TNR_WEIGHT_BUF) * 4);
-#endif
-
-	/* 3aa/isp internal DMA buffer */
-	minfo->pb_taaisp = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, TAAISP_DMA_SIZE + tnr_size, 16);
-	if (IS_ERR_OR_NULL(minfo->pb_taaisp)) {
-		err("failed to allocate buffer for TAAISP_DMA memory");
-		return -ENOMEM;
-	}
-
-	info("[RSC] TAAISP_DMA memory size (aligned) : %08lx\n", TAAISP_DMA_SIZE + tnr_size);
-
-	return 0;
-}
-
-static int fimc_is_resourcemgr_init_dynamic_mem(struct fimc_is_resourcemgr *resourcemgr)
-{
-	struct fimc_is_minfo *minfo = NULL;
-	int ret = 0;
-
-	probe_info("fimc_is_init_mem - ION\n");
-
-	ret = fimc_is_resourcemgr_alloc_dynamic_mem(resourcemgr);
-	if (ret) {
-		err("Couldn't alloc for FIMC-IS\n");
-		ret = -ENOMEM;
-		goto p_err;
-	}
-
-	minfo = &resourcemgr->minfo;
-
-	resourcemgr->minfo.dvaddr_taaisp = CALL_BUFOP(minfo->pb_taaisp, dvaddr, minfo->pb_taaisp);
-	resourcemgr->minfo.kvaddr_taaisp = CALL_BUFOP(minfo->pb_taaisp, kvaddr, minfo->pb_taaisp);
-
-	info("[RSC] %s done\n", __func__);
-p_err:
-	return ret;
-}
-
-static int fimc_is_resourcemgr_deinit_dynamic_mem(struct fimc_is_resourcemgr *resourcemgr)
+#ifndef ENABLE_RESERVED_MEM
+static int fimc_is_resourcemgr_deinitmem(struct fimc_is_resourcemgr *resourcemgr)
 {
 	struct fimc_is_minfo *minfo = &resourcemgr->minfo;
 	int ret = 0;
 
-	CALL_VOID_BUFOP(minfo->pb_taaisp, free, minfo->pb_taaisp);
-
+	CALL_VOID_BUFOP(minfo->pb_setfile, free, minfo->pb_setfile);
+	CALL_VOID_BUFOP(minfo->pb_rear_cal, free, minfo->pb_rear_cal);
+	CALL_VOID_BUFOP(minfo->pb_front_cal, free, minfo->pb_front_cal);
+	CALL_VOID_BUFOP(minfo->pb_debug, free, minfo->pb_debug);
+	CALL_VOID_BUFOP(minfo->pb_dregion, free, minfo->pb_dregion);
+	CALL_VOID_BUFOP(minfo->pb_pregion, free, minfo->pb_pregion);
+	CALL_VOID_BUFOP(minfo->pb_fshared, free, minfo->pb_fshared);
+#if defined (ENABLE_FD_SW)
+	CALL_VOID_BUFOP(minfo->pb_lhfd, free, minfo->pb_lhfd);
+#endif
+#if defined (ENABLE_VRA)
+	CALL_VOID_BUFOP(minfo->pb_vra, free, minfo->pb_vra);
+#endif
+#if defined (ENABLE_DNR_IN_MCSC)
+	CALL_VOID_BUFOP(minfo->pb_mcsc_dnr, free, minfo->pb_mcsc_dnr);
+#endif
+#if defined (ENABLE_ODC) || defined (ENABLE_VDIS) || defined (ENABLE_DNR_IN_TPU)
+	CALL_VOID_BUFOP(minfo->pb_tpu, free, minfo->pb_tpu);
+#endif
 	return ret;
 }
-#endif /* #ifdef ENABLE_DYNAMIC_MEM */
-
-static struct vm_struct fimc_is_lib_vm;
-static struct vm_struct fimc_is_heap_vm;
-static struct vm_struct fimc_is_heap_rta_vm;
-#if defined(RESERVED_MEM_IN_DT)
-static int fimc_is_rmem_device_init(struct reserved_mem *rmem,
-				    struct device *dev)
-{
-	WARN(1, "%s() should never be called!", __func__);
-	return 0;
-}
-
-static void fimc_is_rmem_device_release(struct reserved_mem *rmem,
-					struct device *dev)
-{
-}
-
-static const struct reserved_mem_ops fimc_is_rmem_ops = {
-	.device_init	= fimc_is_rmem_device_init,
-	.device_release	= fimc_is_rmem_device_release,
-};
-
-static int __init fimc_is_reserved_mem_setup(struct reserved_mem *rmem)
-{
-	const __be32 *prop;
-	u64 kbase;
-	int len;
-
-	prop = of_get_flat_dt_prop(rmem->fdt_node, "kernel_virt", &len);
-	if (!prop) {
-		pr_err("kernel_virt is not found in '%s' node\n", rmem->name);
-		return -EINVAL;
-	}
-
-	if (len != dt_root_addr_cells * sizeof(__be32)) {
-		pr_err("invalid kernel_virt property in '%s' node.\n",
-			rmem->name);
-		return -EINVAL;
-	}
-
-	kbase = dt_mem_next_cell(dt_root_addr_cells, &prop);
-
-	fimc_is_lib_vm.phys_addr = rmem->base;
-	fimc_is_lib_vm.addr = (void *)kbase;
-	fimc_is_lib_vm.size = LIB_SIZE + PAGE_SIZE;
-
-	BUG_ON(rmem->size < LIB_SIZE);
-
-	vm_area_add_early(&fimc_is_lib_vm);
-
-	probe_info("fimc-is library memory: 0x%llx\n", kbase);
-
-	fimc_is_heap_vm.addr = (void *)HEAP_START;
-	fimc_is_heap_vm.size = HEAP_SIZE + PAGE_SIZE;
-
-	vm_area_add_early(&fimc_is_heap_vm);
-
-	probe_info("fimc-is heap memory: 0x%lx\n", HEAP_START);
-
-	rmem->ops = &fimc_is_rmem_ops;
-
-	return 0;
-}
-RESERVEDMEM_OF_DECLARE(fimc_is_lib, "exynos,fimc_is_lib", fimc_is_reserved_mem_setup);
-#else
-static int __init fimc_is_lib_mem_alloc(char *str)
-{
-	ulong addr = 0;
-
-	if (kstrtoul(str, 0, (ulong *)&addr) || !addr) {
-		probe_warn("invalid fimc-is library memory address, use default");
-		addr = __LIB_START;
-	}
-
-	if (addr != __LIB_START)
-		probe_warn("use different address [reserve-fimc=0x%lx default:0x%lx]",
-				addr, __LIB_START);
-
-	fimc_is_lib_vm.phys_addr = memblock_alloc(LIB_SIZE, SZ_4K);
-	fimc_is_lib_vm.addr = (void *)addr;
-	fimc_is_lib_vm.size = LIB_SIZE + PAGE_SIZE;
-
-	vm_area_add_early(&fimc_is_lib_vm);
-
-	probe_info("fimc-is library memory: 0x%lx\n", addr);
-
-	fimc_is_heap_vm.addr = (void *)HEAP_START;
-	fimc_is_heap_vm.size = HEAP_SIZE + PAGE_SIZE;
-
-	vm_area_add_early(&fimc_is_heap_vm);
-
-	probe_info("fimc-is heap DDK memory: 0x%lx\n", HEAP_START);
-
-	fimc_is_heap_rta_vm.addr = (void *)HEAP_RTA_START;
-	fimc_is_heap_rta_vm.size = HEAP_RTA_SIZE + PAGE_SIZE;
-
-	vm_area_add_early(&fimc_is_heap_rta_vm);
-
-	probe_info("fimc-is heap RTA memory: 0x%lx\n", HEAP_RTA_START);
-
-	return 0;
-}
-__setup("reserve-fimc=", fimc_is_lib_mem_alloc);
 #endif
-
-static int __init fimc_is_lib_mem_map(void)
-{
-	int page_size, i;
-	struct page *page;
-	struct page **pages;
-
-	if (!fimc_is_lib_vm.phys_addr) {
-		probe_err("There is no reserve-fimc= at bootargs.");
-		return -ENOMEM;
-	}
-
-	page_size = fimc_is_lib_vm.size / PAGE_SIZE;
-	pages = kzalloc(sizeof(struct page*) * page_size, GFP_KERNEL);
-	page = phys_to_page(fimc_is_lib_vm.phys_addr);
-
-	for (i = 0; i < page_size; i++)
-		pages[i] = page++;
-
-	if (map_vm_area(&fimc_is_lib_vm, PAGE_KERNEL, pages)) {
-		probe_err("failed to mapping between virt and phys for binary");
-		vunmap(fimc_is_lib_vm.addr);
-		kfree(pages);
-		return -ENOMEM;
-	}
-
-	kfree(pages);
-
-	return 0;
-}
-
-static int __init fimc_is_heap_mem_map(struct fimc_is_resourcemgr *resourcemgr,
-	struct vm_struct *vm, int heap_size)
-{
-	struct fimc_is_mem *mem = &resourcemgr->mem;
-	struct fimc_is_priv_buf *pb;
-	struct scatterlist *sg;
-	struct sg_table *table;
-	int i, j;
-	int npages = vm->size / PAGE_SIZE;
-	struct page **pages = vmalloc(sizeof(struct page *) * npages);
-	struct page **tmp = pages;
-
-	if (heap_size == 0) {
-		warn("heap size is zero");
-		vfree(pages);
-		return 0;
-	}
-
-	pb = CALL_PTR_MEMOP(mem, alloc, mem->default_ctx, heap_size, 16);
-	if (IS_ERR_OR_NULL(pb)) {
-		err("failed to allocate buffer for HEAP");
-		vfree(pages);
-		return -ENOMEM;
-	}
-
-	table = pb->cookie->sgt;
-
-	for_each_sg(table->sgl, sg, table->nents, i) {
-		int npages_this_entry = PAGE_ALIGN(sg->length) / PAGE_SIZE;
-		struct page *page = sg_page(sg);
-
-		BUG_ON(i >= npages);
-		for (j = 0; j < npages_this_entry; j++)
-			*(tmp++) = page++;
-	}
-
-	if (map_vm_area(vm, PAGE_KERNEL, pages)) {
-		probe_err("failed to mapping between virt and phys for binary");
-		vunmap(vm->addr);
-		vfree(pages);
-		CALL_VOID_BUFOP(pb, free, pb);
-		return -ENOMEM;
-	}
-
-	vfree(pages);
-
-	return 0;
-}
 #endif /* #ifdef ENABLE_IS_CORE */
 
 static int fimc_is_tmu_notifier(struct notifier_block *nb,
@@ -991,7 +777,6 @@ int fimc_is_resourcemgr_probe(struct fimc_is_resourcemgr *resourcemgr,
 
 	/* rsc mutex init */
 	mutex_init(&resourcemgr->rsc_lock);
-	mutex_init(&resourcemgr->sysreg_lock);
 
 	/* temperature monitor unit */
 	resourcemgr->tmu_notifier.notifier_call = fimc_is_tmu_notifier;
@@ -1021,24 +806,6 @@ int fimc_is_resourcemgr_probe(struct fimc_is_resourcemgr *resourcemgr,
 		goto p_err;
 	}
 #endif
-
-	ret = fimc_is_lib_mem_map();
-	if (ret) {
-		probe_err("fimc_is_lib_mem_map is fail(%d)", ret);
-		goto p_err;
-	}
-
-	ret = fimc_is_heap_mem_map(resourcemgr, &fimc_is_heap_vm, HEAP_SIZE);
-	if (ret) {
-		probe_err("fimc_is_heap_mem_map for HEAP_DDK is fail(%d)", ret);
-		goto p_err;
-	}
-
-	ret = fimc_is_heap_mem_map(resourcemgr, &fimc_is_heap_rta_vm, HEAP_RTA_SIZE);
-	if (ret) {
-		probe_err("fimc_is_heap_mem_map for HEAP_RTA is fail(%d)", ret);
-		goto p_err;
-	}
 
 #ifdef ENABLE_DVFS
 	/* dvfs controller init */
@@ -1208,14 +975,6 @@ int fimc_is_resource_get(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 			spin_lock_init(&core->shared_rsc_slock[i]);
 			atomic_set(&core->shared_rsc_count[i], 0);
 		}
-
-#ifdef ENABLE_DYNAMIC_MEM
-		ret = fimc_is_resourcemgr_init_dynamic_mem(resourcemgr);
-		if (ret) {
-			err("fimc_is_resourcemgr_initmem is fail(%d)\n", ret);
-			goto p_err;
-		}
-#endif
 	}
 
 	if (atomic_read(&resource->rsccount) == 0) {
@@ -1282,6 +1041,14 @@ int fimc_is_resource_get(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 				ret = -EINVAL;
 				goto p_err;
 			}
+
+#ifndef ENABLE_RESERVED_MEM
+			ret = fimc_is_resourcemgr_initmem(resourcemgr);
+			if (ret) {
+				err("fimc_is_resourcemgr_initmem is fail(%d)\n", ret);
+				goto p_err;
+			}
+#endif
 
 			ret = fimc_is_debug_open(&resourcemgr->minfo);
 			if (ret) {
@@ -1483,6 +1250,12 @@ int fimc_is_resource_put(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 			if (ret)
 				err("fimc_is_debug_close is fail(%d)", ret);
 
+#ifndef ENABLE_RESERVED_MEM
+			ret = fimc_is_resourcemgr_deinitmem(resourcemgr);
+			if (ret)
+				err("fimc_is_resourcemgr_deinitmem is fail(%d)", ret);
+#endif
+
 			clear_bit(FIMC_IS_RM_ISC_POWER_ON, &resourcemgr->state);
 
 #if defined(CONFIG_SOC_EXYNOS8895)
@@ -1506,13 +1279,6 @@ int fimc_is_resource_put(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 	/* global update */
 	if (atomic_read(&core->rsccount) == 1) {
 		u32 current_min, current_max;
-
-#ifdef ENABLE_DYNAMIC_MEM
-		ret = fimc_is_resourcemgr_deinit_dynamic_mem(resourcemgr);
-		if (ret)
-			err("fimc_is_resourcemgr_deinit_dynamic_mem is fail(%d)", ret);
-#endif
-
 
 		current_min = (resourcemgr->cluster0 & CLUSTER_MIN_MASK) >> CLUSTER_MIN_SHIFT;
 		current_max = (resourcemgr->cluster0 & CLUSTER_MAX_MASK) >> CLUSTER_MAX_SHIFT;

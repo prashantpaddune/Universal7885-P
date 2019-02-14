@@ -161,6 +161,7 @@ static int fimc_is_ischain_3ap_tag(struct fimc_is_subdev *subdev,
 	int ret = 0;
 	struct fimc_is_subdev *leader;
 	struct fimc_is_queue *queue;
+	struct camera2_scaler_uctl *scalerUd;
 	struct taa_param *taa_param;
 	struct fimc_is_crop *otcrop, otparm;
 	struct fimc_is_device_ischain *device;
@@ -182,6 +183,7 @@ static int fimc_is_ischain_3ap_tag(struct fimc_is_subdev *subdev,
 	lindex = hindex = indexes = 0;
 	leader = subdev->leader;
 	taa_param = &device->is_region->parameter.taa;
+	scalerUd = &ldr_frame->shot->uctl.scalerUd;
 	queue = GET_SUBDEV_QUEUE(subdev);
 	if (!queue) {
 		merr("queue is NULL", device);
@@ -234,7 +236,7 @@ static int fimc_is_ischain_3ap_tag(struct fimc_is_subdev *subdev,
 			pixelformat,
 			otcrop->w,
 			otcrop->h,
-			ldr_frame->txpTargetAddress);
+			scalerUd->txpTargetAddress);
 		if (ret) {
 			mswarn("%d frame is drop", device, subdev, ldr_frame->fcount);
 			node->request = 0;
@@ -260,9 +262,9 @@ static int fimc_is_ischain_3ap_tag(struct fimc_is_subdev *subdev,
 				otcrop->x, otcrop->y, otcrop->w, otcrop->h);
 		}
 
-		ldr_frame->txpTargetAddress[0] = 0;
-		ldr_frame->txpTargetAddress[1] = 0;
-		ldr_frame->txpTargetAddress[2] = 0;
+		scalerUd->txpTargetAddress[0] = 0;
+		scalerUd->txpTargetAddress[1] = 0;
+		scalerUd->txpTargetAddress[2] = 0;
 		node->request = 0;
 	}
 

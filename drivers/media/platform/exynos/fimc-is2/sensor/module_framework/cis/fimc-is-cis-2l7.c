@@ -683,9 +683,7 @@ int sensor_2l7_cis_stream_on(struct v4l2_subdev *subdev)
 
 	dbg_sensor(1, "[MOD:D:%d] %s\n", cis->id, __func__);
 
-	ret = sensor_2l7_cis_group_param_hold_func(subdev, 0x01);
-	if (ret < 0)
-		err("group_param_hold_func failed at stream on");
+	sensor_2l7_cis_group_param_hold_func(subdev, 0x01);
 
 #ifdef DEBUG_2L7_PLL
 	{
@@ -769,9 +767,7 @@ int sensor_2l7_cis_stream_off(struct v4l2_subdev *subdev)
 
 	dbg_sensor(1, "[MOD:D:%d] %s\n", cis->id, __func__);
 
-	ret = sensor_2l7_cis_group_param_hold_func(subdev, 0x00);
-	if (ret < 0)
-		err("group_param_hold_func failed at stream off");
+	sensor_2l7_cis_group_param_hold_func(subdev, 0x00);
 
 #ifdef CONFIG_SENSOR_RETENTION_USE
 	/* retention mode CRC check register enable */

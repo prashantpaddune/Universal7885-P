@@ -463,7 +463,7 @@ int sensor_imx241_cis_stream_on(struct v4l2_subdev *subdev)
 
 #if 0
 	/* WDR */
-	if (cis_data->is_data.wdr_enable == true)
+	if (cis_data->companion_data.enable_wdr == true)
 		ret = fimc_is_sensor_write8(client, 0x0216, 0x01);
 	else
 		ret = fimc_is_sensor_write8(client, 0x0216, 0x00);
@@ -623,7 +623,7 @@ int sensor_imx241_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_pa
 
 #if 0
 	/* Long exposure */
-	if (cis_data->is_data.wdr_enable == true) {
+	if (cis_data->companion_data.enable_wdr == true) {
 		ret = fimc_is_sensor_write16(client, 0x021E, long_coarse_int);
 		if (ret < 0)
 			goto p_err;

@@ -20,20 +20,6 @@
 
 #define MAX_SENSOR_SHARED_RSC	10
 
-enum sensor_shared_rsc_pin_t{
-	SHARED_PIN0 = 0,
-	SHARED_PIN1,
-	SHARED_PIN2,
-	SHARED_PIN3,
-	SHARED_PIN4,
-	SHARED_PIN5,
-	SHARED_PIN6,
-	SHARED_PIN7,
-	SHARED_PIN8,
-	SHARED_PIN9,
-	SHARED_PIN_MAX,
-};
-
 enum shared_rsc_type_t {
 	SRT_ACQUIRE = 1,
 	SRT_RELEASE,
@@ -111,9 +97,6 @@ struct exynos_platform_fimc_is_module {
 	u32 af_product_name;
 	u32 af_i2c_addr;
 	u32 af_i2c_ch;
-	u32 iris_product_name;
-	u32 iris_i2c_addr;
-	u32 iris_i2c_ch;
 	u32 ois_product_name;
 	u32 ois_i2c_addr;
 	u32 ois_i2c_ch;

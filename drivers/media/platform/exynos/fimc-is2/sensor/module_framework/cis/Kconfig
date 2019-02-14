@@ -20,14 +20,6 @@ config CAMERA_CIS_5E2_OBJ
         help
           Use to build 5E2 camera sensor.
 
-config CAMERA_CIS_5E9_OBJ
-        bool "Use 5E9 camera cis"
-	depends on USE_DIRECT_IS_CONTROL
-	depends on CAMERA_CIS_SELECT
-        default n
-        help
-          Use to build 5E9 camera sensor.
-
 config CAMERA_CIS_5E3_OBJ
         bool "Use 5E3 camera cis"
 	depends on USE_DIRECT_IS_CONTROL
@@ -51,14 +43,6 @@ config CAMERA_CIS_4H5_OBJ
         default n
         help
           Use to build 4H5 camera sensor.
-
-config CAMERA_CIS_4HA_OBJ
-        bool "Use 4HA camera cis"
-	depends on USE_DIRECT_IS_CONTROL
-	depends on CAMERA_CIS_SELECT
-        default n
-        help
-          Use to build 4HA camera sensor.
 
 config CAMERA_CIS_2P2_OBJ
 		bool "Use 2P2 camera cis"
@@ -84,14 +68,6 @@ config CAMERA_CIS_2P8_OBJ
 		help
 		  Use to build 2P8 camera sensor.
 
-config CAMERA_CIS_2X5_OBJ
-		bool "Use 2X5 camera cis"
-	depends on USE_DIRECT_IS_CONTROL
-	depends on CAMERA_CIS_SELECT
-		default n
-		help
-		  Use to build 2X5 camera sensor.
-
 config CAMERA_CIS_3P3_OBJ
 		bool "Use 3P3 camera cis"
 	depends on USE_DIRECT_IS_CONTROL
@@ -107,14 +83,6 @@ config CAMERA_CIS_3L2_OBJ
 		default n
 		help
 		  Use to build 3L2 camera sensor.
-		  
-config CAMERA_CIS_3L6_OBJ
-	bool "Use 3L6 camera cis"
-	depends on USE_DIRECT_IS_CONTROL
-	depends on CAMERA_CIS_SELECT
-	default n
-	help
-	  Use to build 3L6 camera sensor.
 
 config CAMERA_CIS_3H1_OBJ
 		bool "Use 3H1 camera cis"
@@ -196,14 +164,6 @@ config CAMERA_CIS_2L2_OBJ
 		default n
 		help
 		  Use to build 2L2 camera sensor.
-
-config CAMERA_CIS_IMX258_OBJ
-		bool "Use IMX258 camera cis"
-	depends on USE_DIRECT_IS_CONTROL
-	depends on CAMERA_CIS_SELECT
-		default n
-		help
-		  Use to build IMX258 camera sensor.
 
 config CAMERA_CIS_IMX260_OBJ
 		bool "Use IMX260 camera cis"
@@ -300,14 +260,6 @@ config CAMERA_CIS_SR846_OBJ
 		default n
 		help
 		  Use to build SR846 camera sensor.
-
-config CAMERA_CIS_IMX576_OBJ
-		bool "Use IMX576 camera cis"
-	depends on USE_DIRECT_IS_CONTROL
-	depends on CAMERA_CIS_SELECT
-		default n
-		help
-		  Use to build IMX576 camera sensor.
 
 config CAMERA_CIS_VIRTUAL_OBJ
 		bool "Use VIRTUAL camera cis"

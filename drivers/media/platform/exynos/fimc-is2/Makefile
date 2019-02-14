@@ -85,8 +85,6 @@ subdir-ccflags-$(CONFIG_FIMC_IS_V6_20_0) += -Idrivers/media/platform/exynos/fimc
 
 ifeq ($(CONFIG_VENDER_MCD),y)
 subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2/vendor/mcd
-else ifeq ($(CONFIG_VENDER_MCD_V2),y)
-subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2/vendor/mcd_v2
 else
 subdir-ccflags-y += -Idrivers/media/platform/exynos/fimc-is2/vendor/default
 endif

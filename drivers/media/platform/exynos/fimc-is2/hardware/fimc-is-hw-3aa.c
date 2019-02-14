@@ -157,9 +157,6 @@ int fimc_is_hw_3aa_mode_change(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong 
 	struct fimc_is_frame *frame = NULL;
 	struct fimc_is_framemgr *framemgr;
 	struct camera2_shot *shot = NULL;
-#ifdef ENABLE_REMOSAIC_CAPTURE_WITH_ROTATION
-	struct fimc_is_device_sensor *sensor;
-#endif
 
 	if (!test_bit_variables(hw_ip->id, &hw_map))
 		return 0;
@@ -186,15 +183,6 @@ int fimc_is_hw_3aa_mode_change(struct fimc_is_hw_ip *hw_ip, u32 instance, ulong 
 		} else {
 			mswarn_hw("enable (frame:NULL)(%d)", instance, hw_ip,
 				framemgr->queued_count[FS_HW_CONFIGURE]);
-#ifdef ENABLE_REMOSAIC_CAPTURE_WITH_ROTATION
-			sensor = hw_ip->group[instance]->device->sensor;
-			if (sensor && sensor->mode_chg_frame) {
-				frame = sensor->mode_chg_frame;
-				shot = frame->shot;
-				msinfo_hw("[F:%d]mode_chg_frame used for REMOSAIC\n",
-					instance, hw_ip, frame->fcount);
-			}
-#endif
 		}
 
 		BUG_ON(!hw_ip->priv_info);
@@ -364,8 +352,8 @@ static int fimc_is_hw_3aa_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 
 	if (param_set->dma_output_before_bds.cmd != DMA_OUTPUT_COMMAND_DISABLE) {
 		for (i = 0; i < frame->planes; i++) {
-			param_set->output_dva_before_bds[i] = frame->txcTargetAddress[i];
-			if (frame->txcTargetAddress[i] == 0) {
+			param_set->output_dva_before_bds[i] = frame->shot->uctl.scalerUd.txcTargetAddress[i];
+			if (frame->shot->uctl.scalerUd.txcTargetAddress[i] == 0) {
 				msinfo_hw("[F:%d]txcTargetAddress[%d] is zero\n",
 					frame->instance, hw_ip, frame->fcount, i);
 				param_set->dma_output_before_bds.cmd = DMA_OUTPUT_COMMAND_DISABLE;
@@ -376,15 +364,15 @@ static int fimc_is_hw_3aa_shot(struct fimc_is_hw_ip *hw_ip, struct fimc_is_frame
 	if (param_set->dma_output_after_bds.cmd != DMA_OUTPUT_COMMAND_DISABLE) {
 		for (i = 0; i < frame->planes; i++) {
 #if defined(SOC_3AAISP)
-			param_set->output_dva_after_bds[i] = frame->txcTargetAddress[i];
-			if (frame->txcTargetAddress[i] == 0) {
+			param_set->output_dva_after_bds[i] = frame->shot->uctl.scalerUd.txcTargetAddress[i];
+			if (frame->shot->uctl.scalerUd.txcTargetAddress[i] == 0) {
 				msinfo_hw("[F:%d]txcTargetAddress[%d] is zero\n",
 					frame->instance, hw_ip, frame->fcount, i);
 				param_set->dma_output_after_bds.cmd = DMA_OUTPUT_COMMAND_DISABLE;
 			}
 #else
-			param_set->output_dva_after_bds[i] = frame->txpTargetAddress[i];
-			if (frame->txpTargetAddress[i] == 0) {
+			param_set->output_dva_after_bds[i] = frame->shot->uctl.scalerUd.txpTargetAddress[i];
+			if (frame->shot->uctl.scalerUd.txpTargetAddress[i] == 0) {
 				msinfo_hw("[F:%d]txpTargetAddress[%d] is zero\n",
 					frame->instance, hw_ip, frame->fcount, i);
 				param_set->dma_output_after_bds.cmd = DMA_OUTPUT_COMMAND_DISABLE;
@@ -701,10 +689,12 @@ static int fimc_is_hw_3aa_apply_setfile(struct fimc_is_hw_ip *hw_ip, u32 scenari
 
 	ret = fimc_is_lib_isp_apply_tune_set(&hw_3aa->lib[instance], setfile_index, instance);
 
-	if (sensor_position == SENSOR_POSITION_REAR || sensor_position == SENSOR_POSITION_REAR2 || sensor_position == SENSOR_POSITION_REAR3)
+	if (sensor_position == SENSOR_POSITION_REAR || sensor_position == SENSOR_POSITION_REAR2)
 		cal_addr = hw_3aa->lib_support->minfo->kvaddr_rear_cal;
+#if !defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT) || defined(CAMERA_OTPROM_SUPPORT_FRONT_HYNIX )
 	else if (sensor_position == SENSOR_POSITION_FRONT || sensor_position == SENSOR_POSITION_FRONT2)
 		cal_addr = hw_3aa->lib_support->minfo->kvaddr_front_cal;
+#endif
 	else
 		return 0;
 

@@ -10,15 +10,6 @@ config CAMERA_EEPROM_SUPPORT_FRONT
         default n
         help
           Enable eeprom for front cam.
-config CAMERA_EEPROM_SUPPORT_REAR3
-        bool "Enable eeprom for 3rdrear cam"
-        depends on VENDER_MCD
-        default n
-        help
-          Enable EEPROM for 3rd rear cam in triple camera.
-          This project has 3 rear camera and each camera has EEPROM for 1st one,
-          OTPROM for 2nd one and EEPROM for 3rd camera.
-          This option support EEPROM for 3rd rear camera.
 config COMPANION_USE
         bool "Use companion"
         depends on VENDER_MCD
@@ -145,45 +136,15 @@ config CAMERA_JACKPOT_JPN
         default n
         help
           This camera is jackpotjpn project.
-config CAMERA_GVIEW2
-        bool "This camera is gview2 project"
-        depends on VENDER_MCD
-        default n
-        help
-          This camera is gview2 project.
 config CAMERA_A6E
         bool "This camera is a6e project"
         depends on VENDER_MCD
         default n
         help
           This camera is a6e project.
-config CAMERA_A7Y18
-        bool "This camera is a7y18 project"
-        depends on VENDER_MCD
-        default n
-        help
-          This camera is a7y18 project.
-config CAMERA_J2CORE
-        bool "This camera is j2core project"
-        depends on VENDER_MCD
-        default n
-        help
-          This camera is j2core project.
-config CAMERA_M20
-        bool "This camera is M20 project"
-        depends on VENDER_MCD
-        default n
-        help
-          This camera is M20 project.
 config CAMERA_OTPROM_SUPPORT_FRONT
         bool "This camera is otp front project"
         depends on VENDER_MCD
         default n
         help
           This camera is otp front project.
-config CAMERA_OTPROM_SUPPORT_REAR
-        bool "This camera is otp rear project"
-        depends on VENDER_MCD
-        default n
-        help
-          This camera is otp rear project.

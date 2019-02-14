@@ -19,10 +19,6 @@
 
 static u32  rear_sensor_id;
 static u32  front_sensor_id;
-static u32	rear2_sensor_id;
-#ifdef CONFIG_SECURE_CAMERA_USE
-static u32  secure_sensor_id;
-#endif
 
 void fimc_is_vendor_csi_stream_on(struct fimc_is_device_csi *csi)
 {
@@ -55,10 +51,6 @@ int fimc_is_vender_probe(struct fimc_is_vender *vender)
 
 	priv->rear_sensor_id = rear_sensor_id;
 	priv->front_sensor_id = front_sensor_id;
-	priv->rear2_sensor_id = rear2_sensor_id;
-#ifdef CONFIG_SECURE_CAMERA_USE
-	priv->secure_sensor_id = secure_sensor_id;
-#endif
 
 	vender->private_data = priv;
 
@@ -70,22 +62,14 @@ int fimc_is_vender_dt(struct device_node *np)
 	int ret = 0;
 
 	ret = of_property_read_u32(np, "rear_sensor_id", &rear_sensor_id);
-	if (ret)
+	if (ret) {
 		probe_err("rear_sensor_id read is fail(%d)", ret);
+	}
 
 	ret = of_property_read_u32(np, "front_sensor_id", &front_sensor_id);
-	if (ret)
+	if (ret) {
 		probe_err("front_sensor_id read is fail(%d)", ret);
-
-	ret = of_property_read_u32(np, "rear2_sensor_id", &rear2_sensor_id);
-	if (ret)
-		probe_err("rear2_sensor_id read is fail(%d)", ret);
-
-#ifdef CONFIG_SECURE_CAMERA_USE
-	ret = of_property_read_u32(np, "secure_sensor_id", &secure_sensor_id);
-	if (ret)
-		probe_err("secure_sensor_id read is fail(%d)", ret);
-#endif
+	}
 
 	return ret;
 }
@@ -132,11 +116,11 @@ int fimc_is_vender_cal_load(struct fimc_is_vender *vender,
 	setup_binary_loader(&cal_bin, 0, 0, NULL, NULL);
 	if (module->position == SENSOR_POSITION_REAR) {
 		/* Load calibration data from file system */
-		ret = request_binary(&cal_bin, FIMC_IS_CAL_SDCARD_PATH,
+		ret = request_binary(&cal_bin, FIMC_IS_REAR_CAL_SDCARD_PATH,
 								FIMC_IS_REAR_CAL, NULL);
 		if (ret) {
 			err("[Vendor]: request_binary filed: %s%s",
-					FIMC_IS_CAL_SDCARD_PATH, FIMC_IS_REAR_CAL);
+					FIMC_IS_REAR_CAL_SDCARD_PATH, FIMC_IS_REAR_CAL);
 			goto exit;
 		}
 #ifdef ENABLE_IS_CORE
@@ -146,11 +130,11 @@ int fimc_is_vender_cal_load(struct fimc_is_vender *vender,
 #endif
 	} else if (module->position == SENSOR_POSITION_FRONT) {
 		/* Load calibration data from file system */
-		ret = request_binary(&cal_bin, FIMC_IS_CAL_SDCARD_PATH,
+		ret = request_binary(&cal_bin, FIMC_IS_REAR_CAL_SDCARD_PATH,
 								FIMC_IS_FRONT_CAL, NULL);
 		if (ret) {
 			err("[Vendor]: request_binary filed: %s%s",
-					FIMC_IS_CAL_SDCARD_PATH, FIMC_IS_FRONT_CAL);
+					FIMC_IS_REAR_CAL_SDCARD_PATH, FIMC_IS_FRONT_CAL);
 			goto exit;
 		}
 #ifdef ENABLE_IS_CORE

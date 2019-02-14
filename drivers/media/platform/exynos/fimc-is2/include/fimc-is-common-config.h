@@ -49,7 +49,6 @@
 #define ENABLE_DBG_STATE
 #define FIXED_SENSOR_DEBUG
 #define ENABLE_RESERVED_MEM
-#define ENABLE_DYNAMIC_MEM
 
 #if defined(CONFIG_PM_DEVFREQ)
 #define ENABLE_DVFS
@@ -87,9 +86,6 @@
 #undef ENABLE_FD_SW
 #endif
 #endif
-
-/* BUG_ON | FIMC_BUG Macro control */
-#define USE_FIMC_BUG
 
 /*
  * =================================================================================================
@@ -309,9 +305,6 @@ extern int debug_sensor;
 
 #define dbg_preproc(fmt, args...) \
 	dbg_common((debug_sensor >= 5) && (debug_sensor < 6), "[PRE]", fmt, ##args)
-
-#define dbg_iris(fmt, args...) \
-	dbg_common((debug_sensor >= 6) && (debug_sensor < 7), "[IRIS]", fmt, ##args)
 
 #
 /*
@@ -594,44 +587,6 @@ extern int debug_sensor;
 	warn_common("[SFR][WAN]%d: ", fmt "\n", __LINE__, ##args)
 #define err_sfr(fmt, args...) \
 	err_common("[SFR][ERR]%d: ", fmt "\n", __LINE__, ##args)
-#endif
-
-#ifdef USE_FIMC_BUG
-#define FIMC_BUG(condition)									\
-	{											\
-		if (unlikely(condition)) {							\
-			info("[BUG][%s] %s:%d(%s)\n", __FILE__, __func__, __LINE__, #condition);\
-			return -EINVAL;								\
-		}										\
-	}
-#define FIMC_BUG_VOID(condition)								\
-	{											\
-		if (unlikely(condition)) {							\
-			info("[BUG][%s] %s:%d(%s)\n", __FILE__, __func__, __LINE__, #condition);\
-			return;									\
-		}										\
-	}
-#define FIMC_BUG_NULL(condition)								\
-	{											\
-		if (unlikely(condition)) {							\
-			info("[BUG][%s] %s:%d(%s)\n", __FILE__, __func__, __LINE__, #condition);\
-			return NULL;								\
-		}										\
-	}
-#define FIMC_BUG_FALSE(condition)								\
-	{											\
-		if (unlikely(condition)) {							\
-			info("[BUG][%s] %s:%d(%s)\n", __FILE__, __func__, __LINE__, #condition);\
-			return false;								\
-		}										\
-	}
-#else
-#define FIMC_BUG(condition)									\
-	BUG_ON(condition);
-#define FIMC_BUG_VOID(condition)								\
-	BUG_ON(condition);
-#define FIMC_BUG_NULL(condition)								\
-	BUG_ON(condition);
 #endif
 
 #endif

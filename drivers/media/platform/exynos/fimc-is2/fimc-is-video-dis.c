@@ -481,7 +481,7 @@ static int fimc_is_dxs_video_s_input(struct file *file, void *priv,
 	unsigned int input)
 {
 	int ret = 0;
-	u32 stream, position, vindex, intype, leader;
+	u32 stream, module, vindex, intype, leader;
 	struct fimc_is_video_ctx *vctx = file->private_data;
 	struct fimc_is_device_ischain *device;
 
@@ -490,13 +490,13 @@ static int fimc_is_dxs_video_s_input(struct file *file, void *priv,
 
 	device = GET_DEVICE(vctx);
 	stream = (input & INPUT_STREAM_MASK) >> INPUT_STREAM_SHIFT;
-	position = (input & INPUT_POSITION_MASK) >> INPUT_POSITION_SHIFT;
+	module = (input & INPUT_MODULE_MASK) >> INPUT_MODULE_SHIFT;
 	vindex = (input & INPUT_VINDEX_MASK) >> INPUT_VINDEX_SHIFT;
 	intype = (input & INPUT_INTYPE_MASK) >> INPUT_INTYPE_SHIFT;
 	leader = (input & INPUT_LEADER_MASK) >> INPUT_LEADER_SHIFT;
 
 	mdbgv_dis("%s(input : %08X)[%d,%d,%d,%d,%d]\n", vctx, __func__, input,
-			stream, position, vindex, intype, leader);
+			stream, module, vindex, intype, leader);
 
 	ret = fimc_is_video_s_input(file, vctx);
 	if (ret) {
@@ -504,7 +504,7 @@ static int fimc_is_dxs_video_s_input(struct file *file, void *priv,
 		goto p_err;
 	}
 
-	ret = fimc_is_ischain_dis_s_input(device, stream, position, vindex, intype, leader);
+	ret = fimc_is_ischain_dis_s_input(device, stream, module, vindex, intype, leader);
 	if (ret) {
 		merr("fimc_is_ischain_isp_s_input is fail(%d)", vctx, ret);
 		goto p_err;

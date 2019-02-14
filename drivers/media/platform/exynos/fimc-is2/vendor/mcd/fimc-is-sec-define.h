@@ -138,9 +138,6 @@
 #define FW_COMP_IMX333_3H1	"E12LY"
 #define FW_COMP_2L2_IMX320	"E12LX"
 
-#define FW_IMX576		"B24LS"
-#define FW_IMX576_C	"C24LS"
-
 #define SDCARD_FW
 
 #define FIMC_IS_DDK					"fimc_is_lib.bin"
@@ -199,7 +196,6 @@
 #define FIMC_IS_3P8SP_SETF			"setfile_3p8sp.bin"
 #define FIMC_IS_SR846_SETF			"setfile_sr846_front.bin"
 #define FIMC_IS_4H5YC_SETF			"setfile_4h5yc.bin"
-#define FIMC_IS_4HA_SETF			"setfile_4ha.bin"
 #define FIMC_IS_5E3_SETF			"setfile_5e3.bin"
 #define FIMC_IS_SR556_SETF			"setfile_sr556.bin"
 
@@ -209,11 +205,6 @@
 #define FIMC_IS_IMX320_SETF			"setfile_imx320.bin"
 #define FIMC_IS_3H1_SETF			"setfile_3h1.bin"
 #define FIMC_IS_4E6_SETF			"setfile_4e6.bin"
-#define FIMC_IS_IMX576_SETF			"setfile_imx576.bin"
-#define FIMC_IS_IMX576_FRONT_SETF	"setfile_imx576_front.bin"
-#define FIMC_IS_3L6_SETF			"setfile_3l6.bin"
-
-
 #define FIMC_IS_COMPANION_MASTER_SETF			"companion_master_setfile.bin"
 #define FIMC_IS_COMPANION_MODE_SETF			"companion_mode_setfile.bin"
 #define FIMC_IS_COMPANION_2P2_MASTER_SETF			"companion_2p2_master_setfile.bin"
@@ -306,7 +297,7 @@ struct fimc_is_from_info {
 #endif
 	u32		crosstalk_cal_data_start_addr; /* Cross Talk for Tetra sensor (Remosaic sensor)*/
 	u32		crosstalk_cal_data_end_addr; /* Cross Talk for Tetra sensor (Remosaic sensor)*/
-#if defined(CAMERA_REAR2) && defined(CAMERA_REAR2_USE_COMMON_EEP)
+#if defined(CAMERA_REAR2)
 	u32		oem2_start_addr;
 	u32		oem2_end_addr;
 	u32		awb2_start_addr;
@@ -356,7 +347,7 @@ struct fimc_is_from_info {
 	u32		awb2_section_crc_addr;
 	u32		shading2_section_crc_addr;
 #endif
-#if defined(CAMERA_REAR2) && defined(CAMERA_REAR2_USE_COMMON_EEP)
+#if defined(CAMERA_REAR2)
 	char		oem2_ver[FIMC_IS_OEM_VER_SIZE + 1];
 	char		awb2_ver[FIMC_IS_AWB_VER_SIZE + 1];
 	char		shading2_ver[FIMC_IS_SHADING_VER_SIZE + 1];
@@ -365,13 +356,6 @@ struct fimc_is_from_info {
 	u32		awb2_section_crc_addr;
 	u32		shading2_section_crc_addr;
 	u32		dual_data_section_crc_addr;
-#else
-#if defined(EEP_DUAL_DATA_VER_START_ADDR)
-	char		dual_data_ver[FIMC_IS_HEADER_VER_SIZE + 1];
-	u32		dual_data_section_crc_addr;
-	u32		dual_data_start_addr;
-	u32		dual_data_end_addr;
-#endif
 #endif
 	char		load_fw_name[50]; 		/* DDK */
 #ifdef USE_RTA_BINARY
@@ -486,15 +470,13 @@ ssize_t write_data_to_file(char *name, char *buf, size_t count, loff_t *pos);
 ssize_t read_data_from_file(char *name, char *buf, size_t count, loff_t *pos);
 bool fimc_is_sec_file_exist(char *name);
 
-int fimc_is_sec_get_max_cal_size(int position);
-int fimc_is_sec_get_sysfs_finfo_by_position(int position, struct fimc_is_from_info **finfo);
 int fimc_is_sec_get_sysfs_finfo(struct fimc_is_from_info **finfo);
 int fimc_is_sec_get_sysfs_pinfo(struct fimc_is_from_info **pinfo);
 int fimc_is_sec_get_sysfs_finfo_front(struct fimc_is_from_info **finfo);
 int fimc_is_sec_get_sysfs_pinfo_front(struct fimc_is_from_info **pinfo);
 int fimc_is_sec_get_front_cal_buf(char **buf);
 
-int fimc_is_sec_get_cal_buf(int position, char **buf);
+int fimc_is_sec_get_cal_buf(char **buf);
 int fimc_is_sec_get_loaded_fw(char **buf);
 int fimc_is_sec_set_loaded_fw(char *buf);
 int fimc_is_sec_get_loaded_c1_fw(char **buf);
@@ -504,7 +486,7 @@ int fimc_is_sec_get_camid_from_hal(char *fw_name, char *setf_name);
 int fimc_is_sec_get_camid(void);
 int fimc_is_sec_set_camid(int id);
 int fimc_is_sec_get_pixel_size(char *header_ver);
-int fimc_is_sec_fw_find(struct fimc_is_core *core, int position);
+int fimc_is_sec_fw_find(struct fimc_is_core *core);
 int fimc_is_sec_run_fw_sel(struct device *dev, int position);
 
 int fimc_is_sec_readfw(struct fimc_is_core *core);
@@ -512,12 +494,11 @@ int fimc_is_sec_read_setfile(struct fimc_is_core *core);
 #ifdef CAMERA_MODULE_COMPRESSED_FW_DUMP
 int fimc_is_sec_inflate_fw(u8 **buf, unsigned long *size);
 #endif
-#if defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT) \
-    || defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
+#if defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 int fimc_is_sec_fw_sel_eeprom(struct device *dev, int id, bool headerOnly);
 #endif
 int fimc_is_sec_write_fw(struct fimc_is_core *core, struct device *dev);
-#if 0 //not used for mid-tier //!defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)
+#if !defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)
 int fimc_is_sec_readcal(struct fimc_is_core *core);
 int fimc_is_sec_fw_sel(struct fimc_is_core *core, struct device *dev, bool headerOnly);
 #endif

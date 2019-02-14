@@ -28,8 +28,8 @@
 struct fimc_is_vender {
 	char fw_path[FIMC_IS_PATH_LEN];
 	char request_fw_path[FIMC_IS_PATH_LEN];
-	char setfile_path[SENSOR_POSITION_MAX][FIMC_IS_PATH_LEN];
-	char request_setfile_path[SENSOR_POSITION_MAX][FIMC_IS_PATH_LEN];
+	char setfile_path[SENSOR_POSITION_END][FIMC_IS_PATH_LEN];
+	char request_setfile_path[SENSOR_POSITION_END][FIMC_IS_PATH_LEN];
 	void *private_data;
 	int companion_crc_error;
 };
@@ -40,20 +40,6 @@ enum {
 	FW_FAIL,
 };
 
-enum fimc_is_rom_type {
-	ROM_TYPE_NONE	= 0,
-	ROM_TYPE_FROM	= 1,
-	ROM_TYPE_EEPROM	= 2,
-	ROM_TYPE_OTPROM	= 3,
-	ROM_TYPE_MAX,
-};
-
-struct fimc_is_rom_data {
-	u32 rom_type;
-	u32 rom_valid;
-	bool is_rom_read; 
-};
-
 enum {
 	COMPANION_CRC_ERROR_INIT_ON_BOOT,
 	COMPANION_CRC_ERROR_NONE_ON_BOOT,
@@ -61,24 +47,6 @@ enum {
 	COMPANION_CRC_ERROR_RESET_ON_BOOT,
 	COMPANION_CRC_ERROR_FATAL_ON_BOOT
 };
-
-#ifdef USE_CAMERA_MIPI_CLOCK_VARIATION
-enum {
-	CAMERA_MIPI_CLOCK_0,
-	CAMERA_MIPI_CLOCK_1,
-	CAMERA_MIPI_CLOCK_MAX,
-	CAMERA_MIPI_CLOCK_DEFAULT = CAMERA_MIPI_CLOCK_0,
-};
-
-enum {
-	CAMERA_RAT_BASE = 1,
-	CAMERA_RAT_GSM = 1,
-	CAMERA_RAT_CDMA = 2,
-	CAMERA_RAT_LTE = 3,
-	CAMERA_RAT_UMTS = 4,
-	CAMERA_RAT_MAX
-};
-#endif
 
 #ifdef USE_CAMERA_HW_BIG_DATA
 #define CAM_HW_ERR_CNT_FILE_PATH "/data/camera/camera_hw_err_cnt.dat"
@@ -88,7 +56,6 @@ struct cam_hw_param {
 	u32 i2c_comp_err_cnt;
 	u32 i2c_ois_err_cnt;
 	u32 i2c_af_err_cnt;
-	u32 i2c_iris_err_cnt;
 	u32 mipi_sensor_err_cnt;
 	u32 mipi_comp_err_cnt;
 } __attribute__((__packed__));
@@ -96,7 +63,6 @@ struct cam_hw_param {
 struct cam_hw_param_collector {
 	struct cam_hw_param rear_hwparam;
 	struct cam_hw_param rear2_hwparam;
-	struct cam_hw_param rear3_hwparam;
 	struct cam_hw_param front_hwparam;
 	struct cam_hw_param front2_hwparam;
 	struct cam_hw_param iris_hwparam;

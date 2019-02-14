@@ -484,26 +484,26 @@ int sensor_module_imx333_probe(struct platform_device *pdev)
 	module->cfgs = ARRAY_SIZE(config_imx333);
 	module->cfg = config_imx333;
 	module->ops = NULL;
-
+        
 	for (ch = 1; ch < CSI_VIRTUAL_CH_MAX; ch++)
 		module->internal_vc[ch] = pdata->internal_vc[ch];
 
 	for (vc_idx = 0; vc_idx < 2; vc_idx++) {
 		switch (vc_idx) {
-		case VC_BUF_DATA_TYPE_SENSOR_STAT1:
+		case VC_BUF_DATA_TYPE_PDAF:
 			module->vc_max_size[vc_idx].width = IMX333_PDAF_MAXWIDTH;
 			module->vc_max_size[vc_idx].height = IMX333_PDAF_MAXHEIGHT;
 			module->vc_max_size[vc_idx].element_size = IMX333_PDAF_ELEMENT;
 			break;
-		case VC_BUF_DATA_TYPE_GENERAL_STAT1:
+		case VC_BUF_DATA_TYPE_MIPI_STAT:
 			module->vc_max_size[vc_idx].width = IMX333_MIPI_MAXWIDTH;
 			module->vc_max_size[vc_idx].height = IMX333_MIPI_MAXHEIGHT;
 			module->vc_max_size[vc_idx].element_size = IMX333_MIPI_ELEMENT;
 			break;
 			}
 	}
-
-	/* Sensor peri */
+	
+    /* Sensor peri */
 	module->private_data = kzalloc(sizeof(struct fimc_is_device_sensor_peri), GFP_KERNEL);
 	if (!module->private_data) {
 		probe_err("fimc_is_device_sensor_peri is NULL");

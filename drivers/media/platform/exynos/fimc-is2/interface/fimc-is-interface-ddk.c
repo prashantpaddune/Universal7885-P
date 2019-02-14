@@ -169,9 +169,6 @@ static void fimc_is_lib_io_callback(void *this, enum lib_cb_event_type event_id,
 	int wq_id = WORK_MAX_MAP;
 	int output_id = ENTRY_END;
 	u32 hw_fcount, index;
-#if defined(ENABLE_FULLCHAIN_OVERFLOW_RECOVERY)
-	int ret = 0;
-#endif
 
 	BUG_ON(!this);
 
@@ -259,11 +256,7 @@ static void fimc_is_lib_io_callback(void *this, enum lib_cb_event_type event_id,
 		msinfo_hw("LIB_EVENT_ERROR_CIN_OVERFLOW\n", instance_id, hw_ip);
 		fimc_is_hardware_flush_frame(hw_ip, FS_HW_CONFIGURE, IS_SHOT_OVERFLOW);
 
-#if defined(ENABLE_FULLCHAIN_OVERFLOW_RECOVERY)
-		ret = fimc_is_hw_overflow_recovery();
-		if (ret < 0)
-			panic("OVERFLOW recovery fail!!!!");
-#elif defined(OVERFLOW_PANIC_ENABLE_ISCHAIN)
+#ifdef OVERFLOW_PANIC_ENABLE_ISCHAIN
 		panic("CIN OVERFLOW!!");
 #endif
 		break;
@@ -286,9 +279,6 @@ static void fimc_is_lib_camera_callback(void *this, enum lib_cb_event_type event
 	u32 hw_fcount, index;
 	bool ret = false;
 	bool frame_done = false;
-	struct fimc_is_framemgr *framemgr;
-	struct fimc_is_frame *frame;
-	ulong flags = 0;
 
 	BUG_ON(!this);
 
@@ -348,33 +338,6 @@ static void fimc_is_lib_camera_callback(void *this, enum lib_cb_event_type event
 		head = GET_HEAD_GROUP_IN_DEVICE(FIMC_IS_DEVICE_ISCHAIN, hw_ip->group[instance_id]);
 		if (!test_bit(FIMC_IS_GROUP_OTF_INPUT, &head->state))
 			up(&hw_ip->smp_resource);
-
-		CALL_HW_OPS(hw_ip, clk_gate, instance_id, false, false);
-		break;
-	case LIB_EVENT_ERROR_CONFIG_LOCK_DELAY:
-		index = hw_ip->debug_index[1];
-		hw_ip->debug_info[index].cpuid[DEBUG_POINT_FRAME_END] = raw_smp_processor_id();
-		hw_ip->debug_info[index].time[DEBUG_POINT_FRAME_END] = local_clock();
-		atomic_add(hw_ip->num_buffers, &hw_ip->count.fe);
-
-		framemgr = hw_ip->framemgr;
-		framemgr_e_barrier_common(framemgr, 0, flags);
-		frame = peek_frame(framemgr, FS_HW_WAIT_DONE);
-		framemgr_x_barrier_common(framemgr, 0, flags);
-
-		if (frame) {
-			if (fimc_is_hardware_frame_ndone(hw_ip, frame, frame->instance,
-						IS_SHOT_CONFIG_LOCK_DELAY)) {
-				mserr_hw("failure in hardware_frame_ndone",
-						frame->instance, hw_ip);
-			}
-		} else {
-			serr_hw("[F:%lu]camera_callback: frame(null)!!(E%d)", hw_ip,
-				(ulong)data, event_id);
-		}
-
-		atomic_set(&hw_ip->status.Vvalid, V_BLANK);
-		wake_up(&hw_ip->status.wait_queue);
 
 		CALL_HW_OPS(hw_ip, clk_gate, instance_id, false, false);
 		break;
@@ -917,24 +880,6 @@ int fimc_is_lib_isp_sensor_update_control(struct fimc_is_lib_isp *this,
 		err_lib("sensor_update_ctl fail (%d)", ret);
 		return ret;
 	}
-
-	return ret;
-}
-
-int fimc_is_lib_isp_reset_recovery(struct fimc_is_hw_ip *hw_ip,
-		struct fimc_is_lib_isp *this, u32 instance_id)
-{
-	int ret = 0;
-
-	BUG_ON(!hw_ip);
-	BUG_ON(!this->func);
-
-	ret = CALL_LIBOP(this, recovery, instance_id);
-	if (ret) {
-		err_lib("chain_reset_recovery fail (%d)", hw_ip->id);
-		return ret;
-	}
-	msinfo_lib("chain_reset_recovery done\n", instance_id, hw_ip);
 
 	return ret;
 }

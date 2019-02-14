@@ -222,7 +222,6 @@ int fimc_is_parse_dt(struct platform_device *pdev)
 	struct device *dev;
 	struct device_node *dvfs_np = NULL;
 	struct device_node *vender_np = NULL;
-	struct device_node *sensor_cmn_np = NULL;
 	struct device_node *np;
 
 	BUG_ON(!pdev);
@@ -254,12 +253,6 @@ int fimc_is_parse_dt(struct platform_device *pdev)
 
 	of_property_read_u32(np, "chain_config", &core->chain_config);
 	probe_info("FIMC-IS chain configuration: %d", core->chain_config);
-
-	sensor_cmn_np = of_find_node_by_name(np, "sensor_common_cfg");
-	if (sensor_cmn_np)
-		core->use_csi_dma_split = of_property_read_bool(sensor_cmn_np, "use_csi_dma_split");
-
-	probe_info("FIMC-IS CSIS DMA split: %d", core->use_csi_dma_split);
 
 	vender_np = of_find_node_by_name(np, "vender");
 	if (vender_np) {
@@ -471,18 +464,6 @@ static int parse_ois_data(struct exynos_platform_fimc_is_module *pdata, struct d
 	return 0;
 }
 
-static int parse_iris_data(struct exynos_platform_fimc_is_module *pdata, struct device_node *dnode)
-{
-	u32 temp;
-	char *pprop;
-
-	DT_READ_U32(dnode, "product_name", pdata->iris_product_name);
-	DT_READ_U32(dnode, "i2c_addr", pdata->iris_i2c_addr);
-	DT_READ_U32(dnode, "i2c_ch", pdata->iris_i2c_ch);
-
-	return 0;
-}
-
 static int parse_power_seq_data(struct exynos_platform_fimc_is_module *pdata, struct device_node *dnode)
 {
 	u32 temp;
@@ -587,7 +568,6 @@ int fimc_is_sensor_module_parse_dt(struct platform_device *pdev,
 	struct device_node *flash_np;
 	struct device_node *preprocessor_np;
 	struct device_node *ois_np;
-	struct device_node *iris_np;
 	struct device_node *power_np;
 	struct device_node *internal_vc_np;
 	struct device *dev;
@@ -666,13 +646,6 @@ int fimc_is_sensor_module_parse_dt(struct platform_device *pdev,
 		parse_ois_data(pdata, ois_np);
 	}
 
-	iris_np = of_find_node_by_name(dnode, "iris");
-	if (!iris_np) {
-		pdata->iris_product_name = IRIS_NAME_NOTHING;
-	} else {
-		parse_iris_data(pdata, iris_np);
-	}
-
 	pdata->power_seq_dt = of_property_read_bool(dnode, "use_power_seq");
 	if(pdata->power_seq_dt == true) {
 		power_np = of_find_node_by_name(dnode, "power_seq");
@@ -726,7 +699,6 @@ int fimc_is_module_parse_dt(struct device *dev,
 	struct device_node *flash_np;
 	struct device_node *preprocessor_np;
 	struct device_node *ois_np;
-	struct device_node *iris_np;
 	struct device_node *power_np;
 	struct device_node *internal_vc_np;
 
@@ -798,13 +770,6 @@ int fimc_is_module_parse_dt(struct device *dev,
 		pdata->ois_product_name = OIS_NAME_NOTHING;
 	} else {
 		parse_ois_data(pdata, ois_np);
-	}
-
-	iris_np = of_find_node_by_name(dnode, "iris");
-	if (!iris_np) {
-		pdata->iris_product_name = IRIS_NAME_NOTHING;
-	} else {
-		parse_iris_data(pdata, iris_np);
 	}
 
 	pdata->power_seq_dt = of_property_read_bool(dnode, "use_power_seq");

@@ -37,7 +37,6 @@
 #include "fimc-is-err.h"
 #include "fimc-is-video.h"
 #include "fimc-is-metadata.h"
-#include "fimc-is-param.h"
 
 const struct v4l2_file_operations fimc_is_vra_video_fops;
 const struct v4l2_ioctl_ops fimc_is_vra_video_ioctl_ops;
@@ -426,7 +425,7 @@ static int fimc_is_vra_video_s_input(struct file *file, void *priv,
 	unsigned int input)
 {
 	int ret = 0;
-	u32 stream, position, vindex, intype, leader;
+	u32 stream, module, vindex, intype, leader;
 	struct fimc_is_video_ctx *vctx = file->private_data;
 	struct fimc_is_device_ischain *device;
 
@@ -435,13 +434,13 @@ static int fimc_is_vra_video_s_input(struct file *file, void *priv,
 
 	device = GET_DEVICE(vctx);
 	stream = (input & INPUT_STREAM_MASK) >> INPUT_STREAM_SHIFT;
-	position = (input & INPUT_POSITION_MASK) >> INPUT_POSITION_SHIFT;
+	module = (input & INPUT_MODULE_MASK) >> INPUT_MODULE_SHIFT;
 	vindex = (input & INPUT_VINDEX_MASK) >> INPUT_VINDEX_SHIFT;
 	intype = (input & INPUT_INTYPE_MASK) >> INPUT_INTYPE_SHIFT;
 	leader = (input & INPUT_LEADER_MASK) >> INPUT_LEADER_SHIFT;
 
 	mdbgv_vra("%s(input : %08X)[%d,%d,%d,%d,%d]\n", vctx, __func__, input,
-			stream, position, vindex, intype, leader);
+			stream, module, vindex, intype, leader);
 
 	ret = fimc_is_video_s_input(file, vctx);
 	if (ret) {
@@ -449,7 +448,7 @@ static int fimc_is_vra_video_s_input(struct file *file, void *priv,
 		goto p_err;
 	}
 
-	ret = fimc_is_ischain_vra_s_input(device, stream, position, vindex, intype, leader);
+	ret = fimc_is_ischain_vra_s_input(device, stream, module, vindex, intype, leader);
 	if (ret) {
 		merr("fimc_is_ischain_isp_s_input is fail(%d)", vctx, ret);
 		goto p_err;
@@ -498,79 +497,6 @@ static int fimc_is_vra_video_g_ctrl(struct file *file, void *priv,
 	return 0;
 }
 
-static int fimc_is_vra_video_s_ext_ctrl(struct file *file, void *priv,
-	struct v4l2_ext_controls *ctrls)
-{
-	int ret = 0;
-	int i;
-	struct fimc_is_video_ctx *vctx = file->private_data;
-	struct fimc_is_device_ischain *device;
-	struct v4l2_ext_control *ext_ctrl;
-	struct v4l2_control ctrl;
-
-	BUG_ON(!vctx);
-	BUG_ON(!GET_DEVICE(vctx));
-	BUG_ON(!ctrls);
-
-	mdbgv_vra("%s\n", vctx, __func__);
-
-	if (ctrls->ctrl_class != V4L2_CTRL_CLASS_CAMERA) {
-		merr("Invalid control class(%d)", vctx, ctrls->ctrl_class);
-		ret = -EINVAL;
-		goto p_err;
-	}
-
-	device = GET_DEVICE(vctx);
-
-	for (i = 0; i < ctrls->count; i++) {
-		ext_ctrl = (ctrls->controls + i);
-
-		switch (ext_ctrl->id) {
-#ifdef ENABLE_HYBRID_FD
-		case V4L2_CID_IS_FDAE:
-			{
-				unsigned long flags = 0;
-				struct is_fdae_info *fdae_info =
-					(struct is_fdae_info *)&device->is_region->fdae_info;
-
-				spin_lock_irqsave(&fdae_info->slock, flags);
-				ret = copy_from_user(fdae_info, ext_ctrl->ptr, sizeof(struct is_fdae_info) - sizeof(spinlock_t));
-				spin_unlock_irqrestore(&fdae_info->slock, flags);
-				if (ret) {
-					merr("copy_from_user of fdae_info is fail(%d)", vctx, ret);
-					goto p_err;
-				}
-
-				mdbgv_vra("[F%d] fdae_info(id: %d, score:%d, rect(%d, %d, %d, %d), face_num:%d\n",
-					vctx,
-					fdae_info->frame_count,
-					fdae_info->id[0],
-					fdae_info->score[0],
-					fdae_info->rect[0].offset_x,
-					fdae_info->rect[0].offset_y,
-					fdae_info->rect[0].width,
-					fdae_info->rect[0].height,
-					fdae_info->face_num);
-			}
-			break;
-#endif
-		default:
-			ctrl.id = ext_ctrl->id;
-			ctrl.value = ext_ctrl->value;
-
-			ret = fimc_is_video_s_ctrl(file, vctx, &ctrl);
-			if (ret) {
-				merr("fimc_is_video_s_ctrl is fail(%d)", device, ret);
-				goto p_err;
-			}
-			break;
-		}
-	}
-
-p_err:
-	return ret;
-}
-
 static int fimc_is_vra_video_g_ext_ctrl(struct file *file, void *priv,
 	struct v4l2_ext_controls *ctrls)
 {
@@ -595,7 +521,6 @@ const struct v4l2_ioctl_ops fimc_is_vra_video_ioctl_ops = {
 	.vidioc_s_input			= fimc_is_vra_video_s_input,
 	.vidioc_s_ctrl			= fimc_is_vra_video_s_ctrl,
 	.vidioc_g_ctrl			= fimc_is_vra_video_g_ctrl,
-	.vidioc_s_ext_ctrls		= fimc_is_vra_video_s_ext_ctrl,
 	.vidioc_g_ext_ctrls		= fimc_is_vra_video_g_ext_ctrl,
 };
 

@@ -80,7 +80,6 @@ enum fimc_is_cam_info_index {
 	CAM_INFO_REAR2,
 	CAM_INFO_IRIS,
 	CAM_INFO_FRONT2 = 5,
-	CAM_INFO_REAR3,
 	CAM_INFO_MAX
 };
 
@@ -98,13 +97,7 @@ struct fimc_is_cam_info {
 	unsigned int dual_open;
 };
 
-struct fimc_is_common_cam_info {
-	unsigned int supported_camera_ids[FIMC_IS_SENSOR_COUNT];
-	unsigned int max_supported_camera;
-};
-
 int fimc_is_get_cam_info(struct fimc_is_cam_info **caminfo);
-void fimc_is_get_common_cam_info(struct fimc_is_common_cam_info **caminfo);
 
 #endif
 #endif /* _FIMC_IS_SYSFS_H_ */

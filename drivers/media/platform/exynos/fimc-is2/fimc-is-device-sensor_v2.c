@@ -52,7 +52,6 @@
 #endif
 #include "fimc-is-vender.h"
 #include "fimc-is-i2c.h"
-#include "fimc-is-vender-specific.h"
 
 #ifdef CONFIG_SOC_EXYNOS8895
 extern struct pm_qos_request exynos_isp_qos_int_cam;
@@ -78,15 +77,12 @@ static int fimc_is_sensor_back_stop(void *qdevice,
 	struct fimc_is_queue *queue);
 
 int fimc_is_search_sensor_module(struct fimc_is_device_sensor *device,
-	u32 position, struct fimc_is_module_enum **module)
+	u32 sensor_id, struct fimc_is_module_enum **module)
 {
 	int ret = 0;
 	u32 mindex, mmax;
-	struct fimc_is_core *core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
-	struct fimc_is_vender_specific *priv = core->vender.private_data;
 	struct fimc_is_module_enum *module_enum;
 	struct fimc_is_resourcemgr *resourcemgr;
-	u32 sensor_id;
 
 	resourcemgr = device->resourcemgr;
 	module_enum = device->module_enum;
@@ -99,44 +95,8 @@ int fimc_is_search_sensor_module(struct fimc_is_device_sensor *device,
 
 	mmax = atomic_read(&device->module_count);
 	for (mindex = 0; mindex < mmax; mindex++) {
-		*module = &module_enum[mindex];
-		if (!(*module)) {
-			merr("module is not probed, mindex = %d", device, mindex);
-			ret = -EINVAL;
-			goto p_err;
-		}
-
-		switch (position) {
-		case SENSOR_POSITION_REAR:
-			sensor_id = priv->rear_sensor_id;
-			break;
-		case SENSOR_POSITION_FRONT:
-			sensor_id = priv->front_sensor_id;
-			break;
-		case SENSOR_POSITION_REAR2:
-			sensor_id = priv->rear2_sensor_id;
-			break;
-		case SENSOR_POSITION_FRONT2:
-			sensor_id = priv->front2_sensor_id;
-			break;
-		case SENSOR_POSITION_REAR3:
-			sensor_id = priv->rear3_sensor_id;
-			break;
-		case SENSOR_POSITION_FRONT3:
-			sensor_id = priv->front3_sensor_id;
-			break;
-#ifdef CONFIG_SECURE_CAMERA_USE
-		case SENSOR_POSITION_SECURE:
-			sensor_id = priv->secure_sensor_id;
-			break;
-#endif
-		default:
-			merr("invalid module position(%d)", device, position);
-			ret = -EINVAL;
-			goto p_err;
-		}
-
-		if ((*module)->sensor_id == sensor_id) {
+		if (module_enum[mindex].sensor_id == sensor_id) {
+			*module = &module_enum[mindex];
 			minfo("module(%d) is found", device, sensor_id);
 			break;
 		}
@@ -147,7 +107,6 @@ int fimc_is_search_sensor_module(struct fimc_is_device_sensor *device,
 		ret = -EINVAL;
 	}
 
-p_err:
 	return ret;
 }
 
@@ -274,7 +233,7 @@ p_err:
 	return ret;
 }
 
-struct fimc_is_sensor_cfg *fimc_is_sensor_g_mode(struct fimc_is_device_sensor *device)
+struct fimc_is_sensor_cfg * fimc_is_sensor_g_mode(struct fimc_is_device_sensor *device)
 {
 	struct fimc_is_sensor_cfg *select = NULL;
 	long approximate_value = LONG_MAX;
@@ -1096,12 +1055,9 @@ static int fimc_is_sensor_notify_by_fend(struct fimc_is_device_sensor *device, v
 	 * This processing frame's fcount should be equals to sensor device's fcount.
 	 * If it's not, it will be processed in next frame.
 	 */
-	if (frame && (frame->fcount > device->fcount)) {
-		mgwarn("frame count is bigger than current (%d > %d)[%d/%d/%d]",
-			device, group, frame->fcount, device->fcount,
-			framemgr->queued_count[FS_REQUEST],
-			framemgr->queued_count[FS_PROCESS],
-			framemgr->queued_count[FS_COMPLETE]);
+	if (frame && (frame->fcount != device->fcount)) {
+		mgwarn("shot mismatch for sensor(%d != %d)",
+			device, group, frame->fcount, device->fcount);
 		frame = NULL;
 	}
 
@@ -1391,12 +1347,6 @@ static int fimc_is_sensor_probe(struct platform_device *pdev)
 	device->devicemgr = &core->devicemgr;
 	device->dtp_del_flag = false;
 
-#ifdef ENABLE_INIT_AWB
-	memset(device->init_wb, 0, sizeof(float) * WB_GAIN_COUNT);
-	memset(device->last_wb, 0, sizeof(float) * WB_GAIN_COUNT);
-	memset(device->chk_wb, 0, sizeof(float) * WB_GAIN_COUNT);
-#endif
-
 	platform_set_drvdata(pdev, device);
 	init_waitqueue_head(&device->instant_wait);
 	INIT_WORK(&device->instant_work, fimc_is_sensor_instanton);
@@ -1512,10 +1462,8 @@ static int fimc_is_sensor_probe(struct platform_device *pdev)
 	clear_bit(FIMC_IS_SUBDEV_START, &device->ssvc2.state);
 	clear_bit(FIMC_IS_SUBDEV_START, &device->ssvc3.state);
 
-#ifdef ENABLE_DTP
 	/* Setup dtp_timer check at probe */
 	setup_timer(&device->dtp_timer, fimc_is_sensor_dtp, (unsigned long)device);
-#endif
 
 	/* internal subdev probe if declared at DT */
 	if (test_bit(SUBDEV_SSVC1_INTERNAL_USE, &device->pdata->internal_state))
@@ -1598,11 +1546,6 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 	memset(&device->sensor_ctl, 0, sizeof(struct camera2_sensor_ctl));
 	memset(&device->lens_ctl, 0, sizeof(struct camera2_lens_ctl));
 	memset(&device->flash_ctl, 0, sizeof(struct camera2_flash_ctl));
-
-#ifdef ENABLE_INIT_AWB
-	/* copy last awb gain value to init awb value */
-	memcpy(device->init_wb, device->last_wb, sizeof(float) * WB_GAIN_COUNT);
-#endif
 
 	groupmgr = device->groupmgr;
 	group = &device->group_sensor;
@@ -1774,7 +1717,6 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 {
 	int ret = 0;
 	struct fimc_is_core *core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
-	struct fimc_is_vender_specific *priv = core->vender.private_data;
 	struct v4l2_subdev *subdev_module;
 	struct v4l2_subdev *subdev_csi;
 	struct v4l2_subdev *subdev_flite;
@@ -1786,8 +1728,6 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 	struct fimc_is_groupmgr *groupmgr;
 	struct fimc_is_vender *vender;
 	u32 sensor_index;
-	u32 module_count;
-	u32 sensor_id;
 
 	BUG_ON(!device);
 	BUG_ON(!device->pdata);
@@ -1811,51 +1751,15 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 		goto p_err;
 	}
 
-	module_count = atomic_read(&device->module_count);
-	for (sensor_index = 0; sensor_index < module_count; sensor_index++) {
-		module = &module_enum[sensor_index];
-		if (!module) {
-			merr("module is not probed, sensor_index = %d", device, sensor_index);
-			ret = -EINVAL;
-			goto p_err;
+	for (sensor_index = 0; sensor_index < SENSOR_MAX_ENUM; sensor_index++) {
+		if (module_enum[sensor_index].sensor_id == input) {
+			module = &module_enum[sensor_index];
+			break;
 		}
-
-		switch (input) {
-		case SENSOR_POSITION_REAR:
-			sensor_id = priv->rear_sensor_id;
-			break;
-		case SENSOR_POSITION_FRONT:
-			sensor_id = priv->front_sensor_id;
-			break;
-		case SENSOR_POSITION_REAR2:
-			sensor_id = priv->rear2_sensor_id;
-			break;
-		case SENSOR_POSITION_FRONT2:
-			sensor_id = priv->front2_sensor_id;
-			break;
-		case SENSOR_POSITION_REAR3:
-			sensor_id = priv->rear3_sensor_id;
-			break;
-		case SENSOR_POSITION_FRONT3:
-			sensor_id = priv->front3_sensor_id;
-			break;
-#ifdef CONFIG_SECURE_CAMERA_USE
-		case SENSOR_POSITION_SECURE:
-			sensor_id = priv->secure_sensor_id;
-			break;
-#endif
-		default:
-			merr("invalid module position(%d)", device, input);
-			ret = -EINVAL;
-			goto p_err;
-		}
-
-		if (module->sensor_id == sensor_id)
-			break;
 	}
 
-	if (sensor_index >= module_count) {
-		merr("module(%d) is not found", device, sensor_id);
+	if (!module) {
+		merr("module is not probed, sensor_index = %d", device, sensor_index);
 		ret = -EINVAL;
 		goto p_err;
 	}
@@ -1955,27 +1859,6 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 		sensor_peri->ois = NULL;
 	}
 
-	/* set iris data */
-	if (device->iris && module->ext.iris_con.product_name == device->iris->id) {
-		u32 i2c_channel = module->ext.iris_con.peri_setting.i2c.channel;
-		sensor_peri->subdev_iris = device->subdev_iris;
-		sensor_peri->iris = device->iris;
-		sensor_peri->iris->sensor_peri = sensor_peri;
-		if (i2c_channel < SENSOR_CONTROL_I2C_MAX)
-			sensor_peri->iris->i2c_lock = &core->i2c_lock[i2c_channel];
-		else
-			mwarn("wrong iris i2c_channel(%d)", device, i2c_channel);
-
-		if (sensor_peri->iris)
-			set_bit(FIMC_IS_SENSOR_APERTURE_AVAILABLE, &sensor_peri->peri_state);
-
-		info("%s[%d] enable iris i2c client. position = %d\n",
-				__func__, __LINE__, core->current_position);
-	} else {
-		sensor_peri->subdev_iris = NULL;
-		sensor_peri->iris = NULL;
-	}
-
 	fimc_is_sensor_peri_init_work(sensor_peri);
 
 #ifdef CONFIG_COMPANION_DIRECT_USE
@@ -2053,23 +1936,6 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 						device, ret, device->smc_state, FIMC_IS_SENSOR_SMC_PREPARE);
 			device->smc_state = FIMC_IS_SENSOR_SMC_PREPARE;
 		}
-	}
-#endif
-
-#ifdef ENABLE_INIT_AWB
-	switch (device->position) {
-	case SENSOR_POSITION_REAR:
-	case SENSOR_POSITION_REAR2:
-	case SENSOR_POSITION_REAR3:
-		device->init_wb_cnt = INIT_AWB_COUNT_REAR;
-		break;
-	case SENSOR_POSITION_FRONT:
-	case SENSOR_POSITION_FRONT2:
-		device->init_wb_cnt = INIT_AWB_COUNT_FRONT;
-		break;
-	default:
-		device->init_wb_cnt = 0; /* not operated */
-		break;
 	}
 #endif
 
@@ -2662,21 +2528,6 @@ int fimc_is_sensor_g_fcount(struct fimc_is_device_sensor *device)
 {
 	BUG_ON(!device);
 	return device->fcount;
-}
-
-int fimc_is_sensor_g_ex_mode(struct fimc_is_device_sensor *device)
-{
-	enum fimc_is_ex_mode ex_mode;
-
-	BUG_ON(!device);
-	BUG_ON(!device->cfg);
-
-	if (device->cfg->framerate >= 240)
-		ex_mode = EX_DUALFPS;
-	else
-		ex_mode = EX_NONE;
-
-	return ex_mode;
 }
 
 int fimc_is_sensor_g_framerate(struct fimc_is_device_sensor *device)
@@ -3687,24 +3538,6 @@ static int fimc_is_sensor_shot(struct fimc_is_device_ischain *ischain,
 		ret = -EINVAL;
 		goto p_err;
 	}
-
-#ifdef ENABLE_INIT_AWB
-	if ((frame->shot->ctl.aa.awbMode == AA_AWBMODE_WB_AUTO)
-		&& (frame->fcount <= sensor->init_wb_cnt)
-		&& (frame->shot->ctl.aa.sceneMode == AA_SCENE_MODE_FACE_LOCK)
-		&& memcmp(sensor->init_wb, sensor->chk_wb, sizeof(float) * WB_GAIN_COUNT)) {
-
-		/* for applying init AWB feature,
-		 * 1. awbMode is AA_AWB_MODE_WB_AUTO
-		 * 2. it is applied at only initial count frame num
-		 * 3. set only last_ae value exist
-		 */
-		memcpy(frame->shot->ctl.color.gains, sensor->init_wb, sizeof(float) * WB_GAIN_COUNT);
-		frame->shot->ctl.aa.awbMode = AA_AWBMODE_OFF;
-
-		mgrdbgs(1, "init AWB(applied cnt:%d)", group->device, group, frame, sensor->init_wb_cnt);
-	}
-#endif
 
 	PROGRAM_COUNT(8);
 

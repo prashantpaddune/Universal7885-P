@@ -21,6 +21,7 @@
 #include "fimc-is-device-sensor-peri.h"
 #include "fimc-is-core.h"
 #include "fimc-is-helper-actuator-i2c.h"
+#include "fimc-is-sec-define.h"
 
 #include "interface/fimc-is-interface-library.h"
 
@@ -53,9 +54,10 @@ int sensor_dw9808_init(struct i2c_client *client, struct fimc_is_caldata_list_dw
 {
 	int ret = 0;
 	u8 i2c_data[2];
-	u32 control_mode, pre_scale, sac_time;
+	u32 pre_scale, sac_time;
+	struct fimc_is_from_info *sysfs_finfo;
 
-	probe_info("%s start\n", __func__);
+	fimc_is_sec_get_sysfs_finfo(&sysfs_finfo);
 
 	if (!cal_data) {
 		/* PD(Power Down) mode enable */
@@ -104,11 +106,15 @@ int sensor_dw9808_init(struct i2c_client *client, struct fimc_is_caldata_list_dw
 		if (ret < 0)
 			goto p_err;
 
-		i2c_data[0] = REG_PRESET;
-		i2c_data[1] = DEF_DW9808_PRESET_MAX;
-		ret = fimc_is_sensor_addr8_write8(client, i2c_data[0], i2c_data[1]);
-		if (ret < 0)
-			goto p_err;
+		if(sysfs_finfo->af_cal_pan)
+		{
+			i2c_data[0] = REG_PRESET;
+			i2c_data[1] = (sysfs_finfo->af_cal_pan / 2 < DEF_DW9808_PRESET_MAX) ? sysfs_finfo->af_cal_pan / 2 : DEF_DW9808_PRESET_MAX;
+			ret = fimc_is_sensor_addr8_write8(client, i2c_data[0], i2c_data[1]);
+			if (ret < 0)
+				goto p_err;
+
+		}
 
 	} else {
 		/* PD(Power Down) mode enable */
@@ -140,12 +146,10 @@ int sensor_dw9808_init(struct i2c_client *client, struct fimc_is_caldata_list_dw
 		 * 000: SAC1, 001: SAC2, 010: SAC2.5, 011: SAC3, 101: SAC4
 		 * 000: Tvibx2, 001: Tvibx1, 010: Tvibx1/2, 011: Tvibx1/4, 100: Tvibx8, 101: Tvibx4
 		 */
-		control_mode = cal_data->control_mode;
 		pre_scale = cal_data->prescale;
-		dbg_actuator("[%s]AF Cal data: control_mode=0x%2x, pre_scale=0x%2x\n", __func__, control_mode, pre_scale);
 
 		i2c_data[0] = REG_MODE;
-		i2c_data[1] = ((control_mode & 0xff) << 5) | (pre_scale & 0xff);
+		i2c_data[1] = (cal_data->control_mode << 5) | pre_scale;
 		ret = fimc_is_sensor_addr8_write8(client, i2c_data[0], i2c_data[1]);
 		if (ret < 0)
 			goto p_err;
@@ -155,7 +159,6 @@ int sensor_dw9808_init(struct i2c_client *client, struct fimc_is_caldata_list_dw
 		 * SACT period = 6.3ms + SACT[5:0] * 0.1ms
 		 */
 		sac_time = cal_data->resonance;
-		dbg_actuator("[%s]AF Cal data: sac_time=0x%2x\n", __func__, sac_time);
 
 		i2c_data[0] = REG_RESONANCE;
 		i2c_data[1] = sac_time;
