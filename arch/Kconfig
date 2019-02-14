@@ -401,27 +401,6 @@ config CC_STACKPROTECTOR_REGULAR
 	  about 3% of all kernel functions, which increases kernel code size
 	  by about 0.3%.
 
-config CC_STACKPROTECTOR_STRONG
-	bool
-	default y if ANDROID_VERSION >= "90000"
-	select CC_STACKPROTECTOR
-	help
-	  Functions will have the stack-protector canary logic added in any
-	  of the following conditions:
-
-	  - local variable's address used as part of the right hand side of an
-	    assignment or function argument
-	  - local variable is an array (or union containing an array),
-	    regardless of array type or length
-	  - uses register local variables
-
-	  This feature requires gcc version 4.9 or above, or a distribution
-	  gcc with the feature backported ("-fstack-protector-strong").
-
-	  On an x86 "defconfig" build, this feature adds canary checks to
-	  about 20% of all kernel functions, which increases the kernel code
-	  size by about 2%.
-
 endchoice
 
 config HAVE_ARCH_WITHIN_STACK_FRAMES
