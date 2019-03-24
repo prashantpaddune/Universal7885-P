@@ -58,6 +58,22 @@
 			clock-frequency = <26000000>;
 		};
 	};
+    
+    firmware {
+		android {
+			compatible = "android,firmware";
+			fstab {
+				compatible = "android,fstab";
+				system {
+					compatible = "android,system";
+					dev = "/dev/block/platform/13500000.dwmmc0/by-name/SYSTEM";
+					type = "ext4";
+					mnt_flags = "ro";
+					fsmgr_flags = "wait";
+				};
+			};
+		};
+	};
 
 	/* USI MODE SETTINGS
 
