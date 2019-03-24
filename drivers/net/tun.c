@@ -1669,6 +1669,7 @@ static int tun_flags(struct tun_struct *tun)
 {
 	// ------------- START of KNOX_VPN ------------------//
 #ifdef CONFIG_KNOX_NCM
+	return tun->flags & (TUN_FEATURES | IFF_PERSIST | IFF_TUN | IFF_TAP | IFF_META_HDR);
 #else
 	return tun->flags & (TUN_FEATURES | IFF_PERSIST | IFF_TUN | IFF_TAP);
 #endif

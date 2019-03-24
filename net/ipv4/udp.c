@@ -113,9 +113,11 @@
 #include <trace/events/skb.h>
 #include <net/busy_poll.h>
 #include "udp_impl.h"
+#ifdef CONFIG_KNOX_NCM
 /* START_OF_KNOX_NPA */
 #include <net/ncm.h>
 /* END_OF_KNOX_NPA */
+#endif
 
 struct udp_table udp_table __read_mostly;
 EXPORT_SYMBOL(udp_table);
@@ -1796,6 +1798,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	if (sk) {
 		struct dst_entry *dst = skb_dst(skb);
 		int ret;
+#ifdef CONFIG_KNOX_NCM
 		/* START_OF_KNOX_NPA */
 		struct nf_conn *ct = NULL;
 		enum ip_conntrack_info ctinfo;
@@ -1803,10 +1806,10 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		char srcaddr[INET6_ADDRSTRLEN_NAP];
 		char dstaddr[INET6_ADDRSTRLEN_NAP];
 		/* END_OF_KNOX_NPA */
-
+#endif
 		if (unlikely(sk->sk_rx_dst != dst))
 			udp_sk_rx_dst_set(sk, dst);
-
+#ifdef CONFIG_KNOX_NCM
 		/* START_OF_KNOX_NPA */
 		/* function to handle open flows with incoming udp packets */
 		if (check_ncm_flag()) {
@@ -1858,6 +1861,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 				}
 			}
 		}
+#endif
 		// KNOX NPA - END
 
 		ret = udp_queue_rcv_skb(sk, skb);
@@ -1878,11 +1882,13 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	if (sk) {
 		int ret;
 		/* START_OF_KNOX_NPA */
+#ifdef CONFIG_KNOX_NCM
 		struct nf_conn *ct = NULL;
 		enum ip_conntrack_info ctinfo;
 		struct nf_conntrack_tuple *tuple = NULL;
 		char srcaddr[INET6_ADDRSTRLEN_NAP];
 		char dstaddr[INET6_ADDRSTRLEN_NAP];
+#endif
 		/* END_OF_KNOX_NPA */
 
 		if (inet_get_convert_csum(sk) && uh->check && !IS_UDPLITE(sk))
@@ -1890,6 +1896,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 						 inet_compute_pseudo);
 
 		/* START_OF_KNOX_NPA */
+#ifdef CONFIG_KNOX_NCM
 		/* function to handle open flows with incoming udp packets */
 		if (check_ncm_flag()) {
 			if ( (sk) && (sk->sk_protocol == IPPROTO_UDP) ) {
@@ -1940,6 +1947,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 				}
 			}
 		}
+#endif
 		// KNOX NPA - END
 
 		ret = udp_queue_rcv_skb(sk, skb);
