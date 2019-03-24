@@ -864,7 +864,9 @@ __nf_conntrack_alloc(struct net *net,
 {
 	struct nf_conn *ct;
 	/* START_OF_KNOX_NPA */
+#ifdef CONFIG_KNOX_NCM
 	struct timespec open_timespec;
+#endif
 	/* END_OF_KNOX_NPA */
 	
 	if (unlikely(!nf_conntrack_hash_rnd)) {
