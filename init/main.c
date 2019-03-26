@@ -111,11 +111,6 @@ extern void init_IRQ(void);
 extern void fork_init(void);
 extern void radix_tree_init(void);
 
-#ifdef CONFIG_KNOX_KAP
-int boot_mode_security __rkp_ro;
-EXPORT_SYMBOL(boot_mode_security);
-#endif
-
 /*
  * Debug helper: via this flag we know that we are in 'early bootup code'
  * where only the boot processor is running with IRQ disabled.  This means
@@ -481,15 +476,6 @@ static int __init do_early_param(char *param, char *val,
 		}
 	}
 	/* We accept everything at this stage. */
-#ifdef CONFIG_KNOX_KAP
-	if ((strncmp(param, "androidboot.security_mode", 26) == 0)) {
-		pr_warn("val = %d\n",*val);
-	        if ((strncmp(val, "1526595585", 10) == 0)) {
-				pr_info("Security Boot Mode \n");
-				boot_mode_security = 1;
-			}
-	}
-#endif
 #ifdef CONFIG_RKP_KDP
 	if ((strncmp(param, "bootmode", 9) == 0)) {
 			//printk("\n RKP22 In Recovery Mode= %d\n",*val);
@@ -497,10 +483,6 @@ static int __init do_early_param(char *param, char *val,
 				is_recovery = 1;
 			}
 	}
-#ifdef CONFIG_KNOX_KAP
-	/* RKP will be enabled by default depends on KDP */
-	boot_mode_security = 1;
-#endif
 #endif
 	unset_memsize_reserved_name();
 	return 0;
@@ -710,9 +692,6 @@ asmlinkage __visible void __init start_kernel(void)
 	mm_init();
 
 #ifdef CONFIG_UH_RKP
-#ifdef CONFIG_KNOX_KAP
-	if (boot_mode_security)
-#endif
 		rkp_init();
 #endif /* CONFIG_UH_RKP */
 #ifdef CONFIG_RKP_KDP
@@ -1153,9 +1132,6 @@ static int __ref kernel_init(void *unused)
 	mark_readonly();
 
 #ifdef CONFIG_UH_RKP
-#ifdef CONFIG_KNOX_KAP
-	if (boot_mode_security)
-#endif
 		rkp_deferred_init();
 #endif
 	system_state = SYSTEM_RUNNING;
