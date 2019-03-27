@@ -2154,7 +2154,7 @@ static void binder_send_failed_reply(struct binder_transaction *t,
 				 * Just ignore the 2nd error in this case.
 				 */
 				pr_warn("Unexpected reply error: %u\n",
-					target_thread->reply_error.cmd);
+						target_thread->reply_error.cmd);
 			}
 			binder_inner_proc_unlock(target_thread->proc);
 			binder_thread_dec_tmpref(target_thread);
@@ -3648,15 +3648,15 @@ static int binder_thread_write(struct binder_proc *proc,
 			if (IS_ERR_OR_NULL(buffer)) {
 				if (PTR_ERR(buffer) == -EPERM) {
 					binder_user_error(
-						"%d:%d BC_FREE_BUFFER u%016llx matched unreturned or currently freeing buffer\n",
-						proc->pid, thread->pid,
-						(u64)data_ptr);
+					"%d:%d BC_FREE_BUFFER u%016llx matched unreturned or currently freeing buffer\n",
+					proc->pid, thread->pid,
+					(u64)data_ptr);
 				} else {
 					binder_user_error(
-						"%d:%d BC_FREE_BUFFER u%016llx no match\n",
-						proc->pid, thread->pid,
-						(u64)data_ptr);
-				}
+					"%d:%d BC_FREE_BUFFER u%016llx no match\n",
+					proc->pid, thread->pid,
+					(u64)data_ptr);
+			}
 				break;
 			}
 			binder_debug(BINDER_DEBUG_FREE_BUFFER,
@@ -4922,7 +4922,7 @@ static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	ret = binder_alloc_mmap_handler(&proc->alloc, vma);
 	if (ret)
-		return ret;
+	return ret;
 	mutex_lock(&proc->files_lock);
 	proc->files = get_files_struct(current);
 	mutex_unlock(&proc->files_lock);
