@@ -312,7 +312,6 @@ unsigned long kbase_get_unmapped_area(struct file *filp,
 				kbase_gpu_vm_unlock(kctx);
 				return -EINVAL;
 			}
-
 			if (!(reg->flags & KBASE_REG_GPU_NX)) {
 				if (cpu_va_bits > gpu_pc_bits) {
 					align_offset = 1ULL << gpu_pc_bits;

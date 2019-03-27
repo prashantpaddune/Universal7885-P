@@ -327,7 +327,6 @@ struct kbase_va_region {
  * In addition, this flag indicates the gpu_alloc member might no longer valid
  * e.g. in infinite cache simulation.
  */
-
 #define KBASE_REG_VA_FREED (1ul << 26)
 
 #define KBASE_REG_ZONE_SAME_VA      KBASE_REG_ZONE(0)
@@ -379,6 +378,7 @@ struct kbase_va_region {
 
 	int    va_refcnt; /* number of users of this va */
 };
+
 static inline bool kbase_is_region_free(struct kbase_va_region *reg)
 {
 	return (!reg || reg->flags & KBASE_REG_FREE);

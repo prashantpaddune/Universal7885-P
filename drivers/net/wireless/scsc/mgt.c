@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright (c) 2012 - 2018 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2019 Samsung Electronics Co., Ltd. All rights reserved
  *
  *****************************************************************************/
 
@@ -389,7 +389,11 @@ static void write_wifi_version_info_file(struct slsi_dev *sdev)
 static void write_m_test_chip_version_file(struct slsi_dev *sdev)
 {
 #ifdef CONFIG_SCSC_WLBTD
+#if defined(ANDROID_VERSION) && (ANDROID_VERSION >= 90000)
 	char *filepath = "/data/vendor/conn/.cid.info";
+#else
+	char *filepath = "/data/misc/conn/.cid.info";
+#endif
 	char buf[256];
 
 	snprintf(buf, sizeof(buf), "%s\n", SCSC_RELEASE_SOLUTION);
@@ -1463,6 +1467,22 @@ int slsi_set_mib_roam(struct slsi_dev *dev, struct net_device *ndev, u16 psid, i
 		}
 
 	return error;
+}
+
+void slsi_reset_throughput_stats(struct net_device *dev)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev *sdev = ndev_vif->sdev;
+	struct slsi_mib_data mib_data = { 0, NULL };
+	int error = SLSI_MIB_STATUS_FAILURE;
+
+	if (slsi_mib_encode_int(&mib_data, SLSI_PSID_UNIFI_THROUGHPUT_DEBUG, 0, 0) == SLSI_MIB_STATUS_SUCCESS)
+		if (mib_data.dataLength) {
+			error = slsi_mlme_set(sdev, dev, mib_data.data, mib_data.dataLength);
+			if (error)
+				SLSI_ERR(sdev, "Err Setting MIB failed. error = %d\n", error);
+			kfree(mib_data.data);
+		}
 }
 
 int slsi_get_mib_roam(struct slsi_dev *sdev, u16 psid, int *mib_value)
