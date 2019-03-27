@@ -1,6 +1,6 @@
 /***************************************************************************
  *
- * Copyright (c) 2014 - 2017 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2014 - 2019 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -1074,6 +1074,7 @@ int slsi_disconnect(struct wiphy *wiphy, struct net_device *dev,
 	switch (ndev_vif->vif_type) {
 	case FAPI_VIFTYPE_STATION:
 	{
+		slsi_reset_throughput_stats(dev);
 		/* Disconnecting spans several host firmware interactions so track the status
 		 * so that the Host can ignore connect related signaling eg. MLME-CONNECT-IND
 		 * now that it has triggered a disconnect.
@@ -1312,22 +1313,6 @@ int slsi_get_station(struct wiphy *wiphy, struct net_device *dev,
 		goto exit;
 	}
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
-	SLSI_NET_DBG1(dev, SLSI_CFG80211, "%pM, tx:%d, txbytes:%llu, rx:%d, rxbytes:%llu\n",
-		      mac,
-		      peer->sinfo.tx_packets,
-		      peer->sinfo.tx_bytes,
-		      peer->sinfo.rx_packets,
-		      peer->sinfo.rx_bytes);
-#else
-	SLSI_NET_DBG1(dev, SLSI_CFG80211, "%pM, tx:%d, txbytes:%d, rx:%d, rxbytes:%d\n",
-		      mac,
-		      peer->sinfo.tx_packets,
-		      peer->sinfo.tx_bytes,
-		      peer->sinfo.rx_packets,
-		      peer->sinfo.rx_bytes);
-#endif
-
 	if (((ndev_vif->iftype == NL80211_IFTYPE_STATION && !(ndev_vif->sta.roam_in_progress)) ||
 	     ndev_vif->iftype == NL80211_IFTYPE_P2P_CLIENT)) {
 		/*Read MIB and fill into the peer.sinfo*/
@@ -1340,6 +1325,26 @@ int slsi_get_station(struct wiphy *wiphy, struct net_device *dev,
 
 	*sinfo = peer->sinfo;
 	sinfo->generation = ndev_vif->cfg80211_sinfo_generation;
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
+			SLSI_NET_DBG1(dev, SLSI_CFG80211, "%pM, tx:%d, txbytes:%llu, rx:%d, rxbytes:%llu tx_fail:%d tx_retry:%d\n",
+				      mac,
+				      peer->sinfo.tx_packets,
+				      peer->sinfo.tx_bytes,
+				      peer->sinfo.rx_packets,
+				      peer->sinfo.rx_bytes,
+				      peer->sinfo.tx_failed,
+				      peer->sinfo.tx_retries);
+#else
+			SLSI_NET_DBG1(dev, SLSI_CFG80211, "%pM, tx:%d, txbytes:%d, rx:%d, rxbytes:%d  tx_fail:%d tx_retry:%d\n",
+				      mac,
+				      peer->sinfo.tx_packets,
+				      peer->sinfo.tx_bytes,
+				      peer->sinfo.rx_packets,
+				      peer->sinfo.rx_bytes,
+				      peer->sinfo.tx_failed,
+				      peer->sinfo.tx_retries);
+#endif
 
 exit:
 	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
@@ -2295,6 +2300,7 @@ int slsi_stop_ap(struct wiphy *wiphy, struct net_device *dev)
 	}
 	ndev_vif = netdev_priv(dev);
 
+	slsi_reset_throughput_stats(dev);
 
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
 
@@ -2334,6 +2340,7 @@ exit:
 	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
 
 	/* AP stop stuff is done in del_station callback*/
+
 	return 0;
 }
 

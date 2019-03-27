@@ -52,7 +52,7 @@
 			clock-frequency = <26000000>;
 		};
 	};
-    
+
     firmware {
 		android {
 			compatible = "android,firmware";
