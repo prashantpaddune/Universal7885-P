@@ -8,6 +8,7 @@
 
 #include <linux/module.h>
 #include <linux/lcd.h>
+#include <linux/display_state.h>
 #include <linux/backlight.h>
 #include <linux/of_device.h>
 #include <linux/ctype.h>
@@ -34,6 +35,12 @@
 
 #ifdef CONFIG_DISPLAY_USE_INFO
 #include "dpui.h"
+
+bool display_on = true;
+bool is_display_on()
+{
+	return display_on;
+}
 
 #define	DPUI_VENDOR_NAME	"SDC"
 #if defined(CONFIG_EXYNOS_DECON_LCD_S6E3FA7_JACKPOT2)
@@ -2567,6 +2574,8 @@ static int dsim_panel_displayon(struct dsim_device *dsim)
 
 	if (lcd->state == PANEL_STATE_SUSPENED)
 		s6e3fa7_init(lcd);
+    
+display_on = true;
 
 	mutex_lock(&lcd->lock);
 	lcd->state = PANEL_STATE_RESUMED;
@@ -2634,6 +2643,8 @@ static int dsim_panel_exitalpm(struct dsim_device *dsim)
 	if (lcd->state == PANEL_STATE_SUSPENED) {
 		s6e3fa7_init(lcd);
 
+        display_on = false;
+        
 		msleep(104);
 		mutex_lock(&lcd->lock);
 		lcd->state = PANEL_STATE_RESUMED;
