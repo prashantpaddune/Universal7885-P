@@ -186,6 +186,7 @@ static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
 static DEFINE_MUTEX(selinux_sdcardfs_lock);
 // ] SEC_SELINUX_PORTING_COMMON
 
+#ifdef CONFIG_SECURITY_SELINUX_DEVELOP
 int selinux_enforcing;
 
 static int __init enforcing_setup(char *str)
