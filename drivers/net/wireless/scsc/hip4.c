@@ -1030,7 +1030,7 @@ consume_ctl_mbulk:
 	}
 
 	/* Update the scoreboard */
-	if (update)
+		if (update)
 		hip4_update_index(hip, HIP4_MIF_Q_TH_CTRL, ridx, idx_r);
 
 	if (rx_flowcontrol)

@@ -1094,8 +1094,8 @@ static ssize_t conn_gadget_usb_buffer_size_store(struct device *dev,
 		return size;
 	}
 
-	if (_conn_gadget_dev->rd_queue_buf) 
-		vfree(_conn_gadget_dev->rd_queue_buf);
+        if (_conn_gadget_dev->rd_queue_buf) 
+            vfree(_conn_gadget_dev->rd_queue_buf);
 
 	_conn_gadget_dev->transfer_size 	= value * 1024;
 	_conn_gadget_dev->rd_queue_size 	= kfifo_size;
@@ -1266,8 +1266,8 @@ static void conn_gadget_cleanup(void)
 
 	misc_deregister(&conn_gadget_device);
 
-    if (_conn_gadget_dev->rd_queue_buf)
-        vfree(_conn_gadget_dev->rd_queue_buf);
+	if (_conn_gadget_dev->rd_queue_buf)
+		vfree(_conn_gadget_dev->rd_queue_buf);
 
 	kfree(_conn_gadget_dev);
 	_conn_gadget_dev = NULL;
