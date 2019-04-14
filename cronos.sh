@@ -18,7 +18,7 @@
 
 # Directory Contol
 CR_DIR=$(pwd)
-CR_TC=/home/prashantp01/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+CR_TC=/home/prashantp01/gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-
 CR_DTS=arch/arm64/boot/dts
 CR_DTB=$CR_DIR/boot.img-dtb
 # Kernel Variables
