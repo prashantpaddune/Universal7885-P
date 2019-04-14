@@ -858,7 +858,7 @@ static void hip4_wq(struct work_struct *data)
 		WARN_ON(1);
 		return;
 	}
-    if (slsi_check_rx_flowcontrol(sdev))
+	if (slsi_check_rx_flowcontrol(sdev))
         rx_flowcontrol = true;
 	service = sdev->service;
 
@@ -1028,10 +1028,10 @@ consume_ctl_mbulk:
 	}
 
 	/* Update the scoreboard */
-	if (update)
+		if (update)
 		hip4_update_index(hip, HIP4_MIF_Q_TH_CTRL, ridx, idx_r);
-
-    if (rx_flowcontrol)
+		
+		if (rx_flowcontrol)
         goto skip_data_q;
 
 	idx_r = hip4_read_index(hip, HIP4_MIF_Q_TH_DAT, ridx);
