@@ -22,8 +22,8 @@ CR_TC=/home/prashantp01/gcc-linaro-7.4.1-2019.02-x86_64_aarch64-linux-gnu/bin/aa
 CR_DTS=arch/arm64/boot/dts
 CR_DTB=$CR_DIR/boot.img-dtb
 # Kernel Variables
-CR_VERSION=V1.0
-CR_NAME=Quantum_pie
+CR_VERSION=V2.0
+CR_NAME=Quantum_Pie
 CR_JOBS=5
 CR_ANDROID=p
 CR_PLATFORM=9.0.0
