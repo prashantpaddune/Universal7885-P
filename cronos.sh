@@ -44,6 +44,9 @@ CR_VARIANT_A730F=A730F
 # Device specific Variables [SM-A530W]
 CR_CONFG_A530W=exynos7885-jackpotltecan_defconfig
 CR_VARIANT_A530W=A530W
+# Device specific Variables [SM-A750FN]
+CR_CONFG_A750FN=exynos7885-a7y18lte_defconfig
+CR_VARIANT_A750FN=A750FN
 ##########################################
 
 # Script functions
@@ -80,7 +83,7 @@ echo "----------------------------------------------"
 echo "$CR_NAME $CR_VERSION Build Script"
 echo "----------------------------------------------"
 PS3='Please select your option : '
-menuvar=("SM-A530F" "SM-A530W" "SM-A730F" "Exit")
+menuvar=("SM-A530F" "SM-A530W" "SM-A730F" "SM-A750FN" "Exit")
 select menuvar in "${menuvar[@]}"
 do
     case $menuvar in
@@ -120,6 +123,21 @@ do
             echo "Starting $CR_VARIANT_A530W kernel build..."
 	    CR_VARIANT=$CR_VARIANT_A530W
 	    CR_CONFG=$CR_CONFG_A530W
+	    BUILD_ZIMAGE
+            echo " "
+            echo "----------------------------------------------"
+            echo "$CR_VARIANT kernel build finished."
+	    echo "Press Any key to end the script"
+            echo "----------------------------------------------"
+            read -n1 -r key
+            break
+            ;;
+        "SM-A750FN")
+            clear
+            CLEAN_SOURCE
+            echo "Starting $CR_VARIANT_A750FN kernel build..."
+	    CR_VARIANT=$CR_VARIANT_A750FN
+	    CR_CONFG=$CR_CONFG_A750FN
 	    BUILD_ZIMAGE
             echo " "
             echo "----------------------------------------------"
