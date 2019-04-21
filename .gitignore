@@ -37,6 +37,8 @@ modules.builtin
 Module.symvers
 *.dwo
 *.su
+*.tlbin
+*.img
 
 #
 # Top-level generic files
@@ -73,6 +75,8 @@ Module.symvers
 include/config
 include/generated
 arch/*/include/generated
+security/proca/proca_certificate-asn1.c
+security/proca/proca_certificate-asn1.h
 
 # stgit generated dirs
 patches-*
