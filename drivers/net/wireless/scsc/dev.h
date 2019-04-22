@@ -125,7 +125,8 @@ static const u16 slsi_rates_table[3][2][10] = {
 #define MAX_CHANNEL_LIST 20
 #define SLSI_MAX_RX_BA_SESSIONS (8)
 #define SLSI_STA_ACTION_FRAME_BITMAP (SLSI_ACTION_FRAME_PUBLIC | SLSI_ACTION_FRAME_WMM | SLSI_ACTION_FRAME_WNM |\
-				      SLSI_ACTION_FRAME_QOS | SLSI_ACTION_FRAME_PROTECTED_DUAL)
+				      SLSI_ACTION_FRAME_QOS | SLSI_ACTION_FRAME_PROTECTED_DUAL |\
+				      SLSI_ACTION_FRAME_RADIO_MEASUREMENT)
 
 /* Default value for MIB SLSI_PSID_UNIFI_DISCONNECT_TIMEOUT + 1 sec*/
 #define SLSI_DEFAULT_AP_DISCONNECT_IND_TIMEOUT 3000
@@ -537,6 +538,9 @@ struct slsi_vif_unsync {
 
 struct slsi_last_disconnected_sta {
 	u8 address[ETH_ALEN];
+	u32 rx_retry_packets;
+	u32 rx_bc_mc_packets;
+	u16 capabilities;
 	int bandwidth;
 	int antenna_mode;
 	int rssi;
@@ -544,6 +548,7 @@ struct slsi_last_disconnected_sta {
 	u16 tx_data_rate;
 	bool mimo_used;
 	u16 reason;
+	int support_mode;
 };
 
 struct slsi_vif_ap {
@@ -925,12 +930,12 @@ struct slsi_dev {
 
 #ifdef CONFIG_SCSC_WLAN_MUTEX_DEBUG
 	struct slsi_mutex          netdev_add_remove_mutex;
-    struct slsi_mutex          netdev_remove_mutex;
+	struct slsi_mutex          netdev_remove_mutex;
 #else
 	/* a std mutex */
 	struct mutex               netdev_add_remove_mutex;
-    /* a std mutex */
-    struct mutex               netdev_remove_mutex;
+	/* a std mutex */
+	struct mutex               netdev_remove_mutex;
 #endif
 	int                        netdev_up_count;
 	struct net_device          __rcu *netdev[CONFIG_SCSC_WLAN_MAX_INTERFACES + 1];               /* 0 is reserved */
@@ -1054,24 +1059,26 @@ struct slsi_dev {
 	bool                       allow_switch_40_mhz; /* Used in AP cert to disable HT40 when not configured */
 	bool                       allow_switch_80_mhz; /* Used in AP cert to disable VHT when not configured */
 #ifdef CONFIG_SCSC_WLAN_AP_INFO_FILE
-	/* Parameters in 'if(ANDROID_VERSION >= 90000) : /data/vendor/conn/.wifiver.info, else : /data/misc/conn/.softap.info' */
+	/* Parameters in '/data/vendor/conn/.softap.info' */
 	bool                       dualband_concurrency;
 	u32                        softap_max_client;
 #endif
 	u32                        fw_dwell_time;
 
-#ifdef CONFIG_SCSC_WLAN_ENHANCED_LOGGING
 #ifdef CONFIG_SCSC_WLAN_MUTEX_DEBUG
 	struct slsi_mutex          logger_mutex;
 #else
 	/* a std mutex */
 	struct mutex               logger_mutex;
 #endif
-#endif
 	int                        lls_num_radio;
 	/*Store vif index corresponding to rtt id for FTM*/
 	u16                             rtt_vif[8];
 	bool                            acs_channel_switched;
+	int                        recovery_timeout; /* ms autorecovery completion timeout */
+#ifdef CONFIG_SCSC_WLAN_ENABLE_MAC_RANDOMISATION
+	bool                            fw_mac_randomization_enabled;
+#endif
 };
 
 /* Compact representation of channels a ESS has been seen on
@@ -1199,5 +1206,9 @@ static inline int slsi_get_supported_mode(const u8 *peer_ie)
 	}
 	return SLSI_80211_MODE_11B;
 }
+
+/* Names of full mode HCF files */
+extern char *slsi_mib_file;
+extern char *slsi_mib_file2;
 
 #endif

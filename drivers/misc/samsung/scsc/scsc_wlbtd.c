@@ -1,10 +1,11 @@
 /****************************************************************************
  *
- * Copyright (c) 2014 - 2018 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2014 - 2019 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 #include <linux/mutex.h>
 #include <linux/wakelock.h>
+
 #include "scsc_wlbtd.h"
 
 #define MAX_TIMEOUT		30000 /* in milisecounds */
@@ -12,30 +13,33 @@
 
 /* completion to indicate when moredump is done */
 static DECLARE_COMPLETION(event_done);
+static DECLARE_COMPLETION(fw_panic_done);
 static DECLARE_COMPLETION(write_file_done);
 static DEFINE_MUTEX(write_file_lock);
 
 static DEFINE_MUTEX(build_type_lock);
-static struct wake_lock wlbtd_wakelock;
 static char *build_type;
+
+static struct wake_lock wlbtd_wakelock;
+
+/* module parameter controlling recovery handling */
+extern int disable_recovery_handling;
 
 /**
  * This callback runs whenever the socket receives messages.
  */
 static int msg_from_wlbtd_cb(struct sk_buff *skb, struct genl_info *info)
 {
-	int status;
+	int status = 0;
 
 	if (info->attrs[1])
-		SCSC_TAG_INFO(WLBTD, "returned data : %s\n",
+		SCSC_TAG_INFO(WLBTD, "ATTR_STR: %s\n",
 				(char *)nla_data(info->attrs[1]));
 
 	if (info->attrs[2]) {
 		status = *((__u32 *)nla_data(info->attrs[2]));
-		if (!status)
-			SCSC_TAG_INFO(WLBTD, "returned status : %u\n", status);
-		else
-			SCSC_TAG_ERR(WLBTD, "returned error : %u\n", status);
+		if (status)
+			SCSC_TAG_ERR(WLBTD, "ATTR_INT: %u\n", status);
 	}
 
 	complete(&event_done);
@@ -45,21 +49,36 @@ static int msg_from_wlbtd_cb(struct sk_buff *skb, struct genl_info *info)
 
 static int msg_from_wlbtd_sable_cb(struct sk_buff *skb, struct genl_info *info)
 {
-	int status;
+	int status = 0;
+	const char *data = (const char *)nla_data(info->attrs[1]);
 
 	if (info->attrs[1])
-		SCSC_TAG_INFO(WLBTD, "returned data : %s\n",
-				(char *)nla_data(info->attrs[1]));
+		SCSC_TAG_INFO(WLBTD, "%s\n", data);
 
 	if (info->attrs[2]) {
 		status = nla_get_u16(info->attrs[2]);
-		if (!status)
-			SCSC_TAG_INFO(WLBTD, "returned status : %u\n", status);
-		else
-			SCSC_TAG_ERR(WLBTD, "returned error : %u\n", status);
+		if (status)
+			SCSC_TAG_ERR(WLBTD, "%u\n", status);
 	}
 
-	complete(&event_done);
+	if (disable_recovery_handling == MEMDUMP_FILE_FOR_RECOVERY) {
+		if (status == MEMDUMP_FILE_KERNEL_PANIC) {
+			/* Auto recovery off + moredump + kernel panic */
+			SCSC_TAG_INFO(WLBTD, "Deliberately panic the kernel due to WLBT firmware failure!\n");
+			SCSC_TAG_INFO(WLBTD, "calling BUG_ON(1)\n");
+			BUG_ON(1);
+		}
+	}
+
+	if (strstr(data, "scsc_log_fw_panic") != NULL) {
+		SCSC_TAG_INFO(WLBTD, "completing fw_panic_done\n");
+		complete(&fw_panic_done);
+	}
+
+	if (strstr(data, ".sbl") != NULL) {
+		SCSC_TAG_INFO(WLBTD, "completing event_done\n");
+		complete(&event_done);
+	}
 
 	return 0;
 }
@@ -115,8 +134,8 @@ static struct nla_policy policies[] = {
 };
 
 static struct nla_policy policy_sable[] = {
-	[ATTR_STR] = { .type = NLA_STRING, },
 	[ATTR_INT] = { .type = NLA_U16, },
+	[ATTR_INT8] = { .type = NLA_U8, },
 };
 
 static struct nla_policy policies_build_type[] = {
@@ -227,6 +246,7 @@ int scsc_wlbtd_get_and_print_build_type(void)
 done:
 	wake_unlock(&wlbtd_wakelock);
 	return rc;
+
 error:
 	if (rc == -ESRCH) {
 		/* If no one registered to scsc_mdp_mcgrp (e.g. in case wlbtd
@@ -253,6 +273,7 @@ int wlbtd_write_file(const char *file_path, const char *file_content)
 	unsigned long max_timeout_jiffies = msecs_to_jiffies(WRITE_FILE_TIMEOUT);
 
 	SCSC_TAG_DEBUG(WLBTD, "start\n");
+
 	mutex_lock(&write_file_lock);
 	wake_lock(&wlbtd_wakelock);
 
@@ -311,18 +332,16 @@ int wlbtd_write_file(const char *file_path, const char *file_content)
 
 	SCSC_TAG_INFO(WLBTD, "waiting for completion\n");
 	/* wait for script to finish */
-completion_jiffies = wait_for_completion_timeout(&write_file_done,
- 						max_timeout_jiffies);
+	completion_jiffies = wait_for_completion_timeout(&write_file_done,
+						max_timeout_jiffies);
 
 	if (completion_jiffies == 0)
 		SCSC_TAG_ERR(WLBTD, "wait for completion timed out !\n");
-
 	else {
 		completion_jiffies = jiffies_to_msecs(max_timeout_jiffies - completion_jiffies);
 
 		SCSC_TAG_INFO(WLBTD, "written %s in %lu ms\n", file_path,
 			completion_jiffies ? completion_jiffies : 1);
-
 	}
 
 	/* reinit so completion can be re-used */
@@ -337,8 +356,9 @@ done:
 error:
 	/* free skb */
 	nlmsg_free(skb);
-    wake_unlock(&wlbtd_wakelock);
-    mutex_unlock(&write_file_lock);
+
+	wake_unlock(&wlbtd_wakelock);
+	mutex_unlock(&write_file_lock);
 	return -1;
 #else /* CONFIG_SCSC_WRITE_INFO_FILE_WLBTD */
 	SCSC_TAG_DEBUG(WLBTD, "not writing %s\n", file_path);
@@ -347,15 +367,18 @@ error:
 }
 EXPORT_SYMBOL(wlbtd_write_file);
 
-int call_wlbtd_sable(const char *trigger, u16 reason_code)
+int call_wlbtd_sable(u8 trigger_code, u16 reason_code)
 {
 	struct sk_buff *skb;
 	void *msg;
 	int rc = 0;
 	unsigned long completion_jiffies = 0;
 	unsigned long max_timeout_jiffies = msecs_to_jiffies(MAX_TIMEOUT);
-wake_lock(&wlbtd_wakelock);
-	SCSC_TAG_INFO(WLBTD, "start:trigger - %s\n", trigger);
+
+	wake_lock(&wlbtd_wakelock);
+
+	SCSC_TAG_INFO(WLBTD, "start:trigger - %s\n",
+		scsc_get_trigger_str((int)trigger_code));
 
 	skb = nlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!skb) {
@@ -383,9 +406,9 @@ wake_lock(&wlbtd_wakelock);
 		goto error;
 	}
 
-	rc = nla_put_string(skb, ATTR_STR, trigger);
+	rc = nla_put_u8(skb, ATTR_INT8, trigger_code);
 	if (rc) {
-		SCSC_TAG_ERR(WLBTD, "nla_put_string failed. rc = %d\n", rc);
+		SCSC_TAG_ERR(WLBTD, "nla_put_u8 failed. rc = %d\n", rc);
 		genlmsg_cancel(skb, msg);
 		goto error;
 	}
@@ -412,7 +435,11 @@ wake_lock(&wlbtd_wakelock);
 	SCSC_TAG_INFO(WLBTD, "waiting for completion\n");
 
 	/* wait for script to finish */
-	completion_jiffies = wait_for_completion_timeout(&event_done,
+	if (trigger_code == SCSC_LOG_FW_PANIC)
+		completion_jiffies = wait_for_completion_timeout(&fw_panic_done,
+						max_timeout_jiffies);
+	else
+		completion_jiffies = wait_for_completion_timeout(&event_done,
 						max_timeout_jiffies);
 
 	if (completion_jiffies) {
@@ -421,12 +448,18 @@ wake_lock(&wlbtd_wakelock);
 		SCSC_TAG_INFO(WLBTD, "sable generated in %dms\n",
 			(int)jiffies_to_msecs(completion_jiffies) ? : 1);
 	} else
-		SCSC_TAG_ERR(WLBTD, "wait for completion timed out !\n");
+		SCSC_TAG_ERR(WLBTD, "wait for completion timed out for %s\n",
+				scsc_get_trigger_str((int)trigger_code));
 
 	/* reinit so completion can be re-used */
-	reinit_completion(&event_done);
+	if (trigger_code == SCSC_LOG_FW_PANIC)
+		reinit_completion(&fw_panic_done);
+	else
+		reinit_completion(&event_done);
 
-	SCSC_TAG_INFO(WLBTD, "  end:trigger - %s\n", trigger);
+	SCSC_TAG_INFO(WLBTD, "  end:trigger - %s\n",
+		scsc_get_trigger_str((int)trigger_code));
+
 done:
 	wake_unlock(&wlbtd_wakelock);
 	return rc;
@@ -434,7 +467,8 @@ done:
 error:
 	/* free skb */
 	nlmsg_free(skb);
-wake_unlock(&wlbtd_wakelock);
+	wake_unlock(&wlbtd_wakelock);
+
 	return -1;
 }
 EXPORT_SYMBOL(call_wlbtd_sable);
@@ -448,7 +482,9 @@ int call_wlbtd(const char *script_path)
 	unsigned long max_timeout_jiffies = msecs_to_jiffies(MAX_TIMEOUT);
 
 	SCSC_TAG_DEBUG(WLBTD, "start\n");
-    wake_lock(&wlbtd_wakelock);
+
+	wake_lock(&wlbtd_wakelock);
+
 	skb = nlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!skb) {
 		SCSC_TAG_ERR(WLBTD, "Failed to construct message\n");
@@ -520,7 +556,7 @@ int call_wlbtd(const char *script_path)
 	reinit_completion(&event_done);
 
 	SCSC_TAG_DEBUG(WLBTD, "end\n");
-	
+
 done:
 	wake_unlock(&wlbtd_wakelock);
 	return rc;
@@ -528,7 +564,8 @@ done:
 error:
 	/* free skb */
 	nlmsg_free(skb);
-wake_unlock(&wlbtd_wakelock);
+	wake_unlock(&wlbtd_wakelock);
+
 	return -1;
 }
 EXPORT_SYMBOL(call_wlbtd);
@@ -536,9 +573,12 @@ EXPORT_SYMBOL(call_wlbtd);
 int scsc_wlbtd_init(void)
 {
 	int r = 0;
+
 	wake_lock_init(&wlbtd_wakelock, WAKE_LOCK_SUSPEND, "wlbtd_wl");
 	init_completion(&event_done);
+	init_completion(&fw_panic_done);
 	init_completion(&write_file_done);
+
 	/* register the family so that wlbtd can bind */
 	r = genl_register_family_with_ops_groups(&scsc_nlfamily, scsc_ops,
 			scsc_mcgrp);
@@ -564,5 +604,6 @@ int scsc_wlbtd_deinit(void)
 	kfree(build_type);
 	build_type = NULL;
 	wake_lock_destroy(&wlbtd_wakelock);
+
 	return ret;
 }
