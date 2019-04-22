@@ -420,7 +420,9 @@ static int slsi_procfs_build_show(struct seq_file *m, void *v)
 #else
 	seq_puts(m, "CONFIG_SCSC_WLAN_SINGLE_ANTENNA                   : n\n");
 #endif
+#ifdef CONFIG_SCSC_AP_INTERFACE_NAME
 	seq_printf(m, "CONFIG_SCSC_AP_INTERFACE_NAME                   : %s\n", CONFIG_SCSC_AP_INTERFACE_NAME);
+#endif
 
 	return 0;
 }
@@ -1089,9 +1091,11 @@ int slsi_create_proc_dir(struct slsi_dev *sdev)
 		SLSI_PROCFS_ADD_FILE(sdev, big_data, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 		SLSI_PROCFS_ADD_FILE(sdev, throughput_stats, parent, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 		SLSI_PROCFS_SEQ_ADD_FILE(sdev, tcp_ack_suppression, sdev->procfs_dir, S_IRUSR | S_IRGRP);
+		return 0;
 	}
 
 err:
+	SLSI_DBG1(sdev, SLSI_HIP, "Failure in creation of proc directories\n");
 	return -EINVAL;
 }
 

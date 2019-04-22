@@ -43,6 +43,7 @@
 
 #define SLSI_BT_SERVICE_CLOSE_RETRY 60
 #define SLSI_BT_SERVICE_STOP_RECOVERY_TIMEOUT 20000
+#define SLSI_BT_SERVICE_STOP_RECOVERY_DISABLED_TIMEOUT 2000
 
 #define SCSC_ANT_MAX_TIMEOUT (20*HZ)
 
@@ -60,6 +61,8 @@ static int bt_recovery_in_progress;
 #ifdef CONFIG_SCSC_ANT
 static int ant_recovery_in_progress;
 #endif
+
+static int recovery_timeout = SLSI_BT_SERVICE_STOP_RECOVERY_TIMEOUT;
 
 struct scsc_common_service common_service;
 struct scsc_bt_service bt_service;
@@ -694,6 +697,14 @@ int slsi_sm_bt_service_start(void)
 		goto exit;
 	}
 
+	/* Shorter completion timeout if autorecovery is disabled, as it will
+	 * never be signalled.
+	 */
+	if (mxman_recovery_disabled())
+		recovery_timeout = SLSI_BT_SERVICE_STOP_RECOVERY_DISABLED_TIMEOUT;
+	else
+		recovery_timeout = SLSI_BT_SERVICE_STOP_RECOVERY_TIMEOUT;
+
 	/* Get shared memory region for the configuration structure from
 	 * the MIF
 	 */
@@ -909,6 +920,15 @@ int slsi_sm_ant_service_start(void)
 		goto exit;
 	}
 
+	/* Shorter completion timeout if autorecovery is disabled, as it will
+	 * never be signalled.
+	 */
+	if (mxman_recovery_disabled())
+		recovery_timeout = SLSI_BT_SERVICE_STOP_RECOVERY_DISABLED_TIMEOUT;
+	else
+		recovery_timeout = SLSI_BT_SERVICE_STOP_RECOVERY_TIMEOUT;
+
+
 	/* Get shared memory region for the configuration structure from
 	 * the MIF
 	 */
@@ -1093,7 +1113,7 @@ recovery:
 		mutex_unlock(&bt_start_mutex);
 
 		ret = wait_for_completion_timeout(&bt_service.recovery_probe_complete,
-		       msecs_to_jiffies(SLSI_BT_SERVICE_STOP_RECOVERY_TIMEOUT));
+		       msecs_to_jiffies(recovery_timeout));
 		if (ret == 0)
 			SCSC_TAG_INFO(BT_COMMON, "recovery_probe_complete timeout\n");
 	}
@@ -1137,7 +1157,7 @@ recovery:
 		mutex_unlock(&ant_start_mutex);
 
 		ret = wait_for_completion_timeout(&ant_service.recovery_probe_complete,
-		       msecs_to_jiffies(SLSI_BT_SERVICE_STOP_RECOVERY_TIMEOUT));
+		       msecs_to_jiffies(recovery_timeout));
 		if (ret == 0)
 			SCSC_TAG_INFO(BT_COMMON, "recovery_probe_complete timeout\n");
 	}
@@ -1365,6 +1385,10 @@ static void slsi_bt_service_remove(struct scsc_mx_module_client *module_client,
 
 	if (reason == SCSC_MODULE_CLIENT_REASON_RECOVERY && bt_recovery_in_progress) {
 		mutex_unlock(&bt_start_mutex);
+
+		/* Wait forever for recovery_release_complete, as it will
+		 * arrive even if autorecovery is disabled.
+		 */
 		wait_for_completion(&bt_service.recovery_release_complete);
 		reinit_completion(&bt_service.recovery_release_complete);
 
@@ -1449,6 +1473,10 @@ static void slsi_ant_service_remove(struct scsc_mx_module_client *module_client,
 		int ret;
 
 		mutex_unlock(&ant_start_mutex);
+
+		/* Wait full duration for recovery_release_complete, as it will
+		 * arrive even if autorecovery is disabled.
+		 */
 		ret = wait_for_completion_timeout(&ant_service.recovery_release_complete,
 		       msecs_to_jiffies(SLSI_BT_SERVICE_STOP_RECOVERY_TIMEOUT));
 		reinit_completion(&ant_service.recovery_release_complete);

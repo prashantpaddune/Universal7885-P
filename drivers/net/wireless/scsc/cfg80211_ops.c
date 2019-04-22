@@ -27,13 +27,18 @@ MODULE_PARM_DESC(keep_alive_period, "default is 10 seconds");
 static bool slsi_is_mhs_active(struct slsi_dev *sdev)
 {
 	struct net_device *mhs_dev = sdev->netdev_ap;
-	struct netdev_vif *ndev_vif = netdev_priv(mhs_dev);
+	struct netdev_vif *ndev_vif;
 	bool ret;
 
-	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
-	ret = ndev_vif->is_available;
-	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
-	return ret;
+	if (mhs_dev) {
+		ndev_vif = netdev_priv(mhs_dev);
+		SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+		ret = ndev_vif->is_available;
+		SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+		return ret;
+	}
+
+	return 0;
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
@@ -521,27 +526,26 @@ int slsi_scan(struct wiphy *wiphy, struct net_device *dev,
 
 #ifdef CONFIG_SCSC_WLAN_ENABLE_MAC_RANDOMISATION
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
-	if (request->flags & NL80211_SCAN_FLAG_RANDOM_ADDR) {
-		memcpy(sdev->scan_mac_addr, request->mac_addr, ETH_ALEN);
-		r = slsi_set_mac_randomisation_mask(sdev, request->mac_addr_mask);
-		if (!r)
-			sdev->scan_addr_set = 1;
-	} else
+		if (request->flags & NL80211_SCAN_FLAG_RANDOM_ADDR) {
+			if (sdev->fw_mac_randomization_enabled) {
+				memcpy(sdev->scan_mac_addr, request->mac_addr, ETH_ALEN);
+				r = slsi_set_mac_randomisation_mask(sdev, request->mac_addr_mask);
+				if (!r)
+					sdev->scan_addr_set = 1;
+			} else {
+				SLSI_NET_INFO(dev, "Mac Randomization is not enabled in Firmware\n");
+				sdev->scan_addr_set = 0;
+			}
+		} else
 #endif
-	if (scan_type == FAPI_SCANTYPE_GSCAN && sdev->scan_addr_set == 1) {
-		memset(mac_addr_mask, 0xFF, ETH_ALEN);
-		for (i = 3; i < ETH_ALEN; i++)
-			mac_addr_mask[i] = 0x00;
-		slsi_set_mac_randomisation_mask(sdev, mac_addr_mask);
-	} else {
 		if (sdev->scan_addr_set) {
 			memset(mac_addr_mask, 0xFF, ETH_ALEN);
 			r = slsi_set_mac_randomisation_mask(sdev, mac_addr_mask);
-			if (!r)
-				sdev->scan_addr_set = 0;
+			sdev->scan_addr_set = 0;
 		}
-	}
 #endif
+
+
 	r = slsi_mlme_add_scan(sdev,
 			       dev,
 			       scan_type,
@@ -684,7 +688,11 @@ int slsi_sched_scan_start(struct wiphy                       *wiphy,
 	if (r != 0) {
 		if (r > 0) {
 			SLSI_NET_DBG2(dev, SLSI_CFG80211, "Nothing to be done\n");
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
+			cfg80211_sched_scan_stopped(wiphy, request->reqid);
+#else
 			cfg80211_sched_scan_stopped(wiphy);
+#endif
 			r = 0;
 		} else {
 			SLSI_NET_DBG2(dev, SLSI_CFG80211, "add_scan error: %d\n", r);
@@ -810,14 +818,16 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 	if (WARN_ON(sme->ssid_len > IEEE80211_MAX_SSID_LEN))
 		goto exit_with_error;
 
-	if ((SLSI_IS_VIF_INDEX_WLAN(ndev_vif)) && (sdev->p2p_state == P2P_GROUP_FORMED_CLI)) {
-		p2p_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_P2PX_SWLAN);
-		if (p2p_dev) {
-			ndev_p2p_vif  = netdev_priv(p2p_dev);
-			if (ndev_p2p_vif->sta.sta_bss) {
-				if (SLSI_ETHER_EQUAL(ndev_p2p_vif->sta.sta_bss->bssid, sme->bssid)) {
-					SLSI_NET_ERR(dev, "Connect Request Rejected\n");
-					goto exit_with_error;
+	if (sme->bssid) {
+		if ((SLSI_IS_VIF_INDEX_WLAN(ndev_vif)) && (sdev->p2p_state == P2P_GROUP_FORMED_CLI)) {
+			p2p_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_P2PX_SWLAN);
+			if (p2p_dev) {
+				ndev_p2p_vif  = netdev_priv(p2p_dev);
+				if (ndev_p2p_vif->sta.sta_bss) {
+					if (SLSI_ETHER_EQUAL(ndev_p2p_vif->sta.sta_bss->bssid, sme->bssid)) {
+						SLSI_NET_ERR(dev, "Connect Request Rejected\n");
+						goto exit_with_error;
+					}
 				}
 			}
 		}
@@ -851,6 +861,10 @@ int slsi_connect(struct wiphy *wiphy, struct net_device *dev,
 			}
 
 			if (!memcmp(&connected_ssid[2], sme->ssid, connected_ssid[1])) { /*same ssid*/
+				if (!sme->channel) {
+					SLSI_NET_ERR(dev, "Roaming has been rejected, as sme->channel is null\n");
+					goto exit_with_error;
+				}
 				r = slsi_mlme_roam(sdev, dev, sme->bssid, sme->channel->center_freq);
 				if (r) {
 					SLSI_NET_ERR(dev, "Failed to roam : %d\n", r);
@@ -1061,7 +1075,13 @@ int slsi_disconnect(struct wiphy *wiphy, struct net_device *dev,
 	 * Unless the MLME-DISCONNECT-CFM fails.
 	 */
 	if (!ndev_vif->activated) {
-		r = -EINVAL;
+		r = 0;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0))
+		cfg80211_disconnected(dev, reason_code, NULL, 0, false, GFP_KERNEL);
+#else
+		cfg80211_disconnected(dev, reason_code, NULL, 0, GFP_KERNEL);
+#endif
+		SLSI_NET_INFO(dev, "Vif is already Deactivated\n");
 		goto exit;
 	}
 
@@ -2132,7 +2152,7 @@ int slsi_start_ap(struct wiphy *wiphy, struct net_device *dev,
 	}
 #endif
 
-	if (indoor_channel == 1
+	if ((indoor_channel == 1)
 #ifdef CONFIG_SCSC_WLAN_WIFI_SHARING
 	|| (wifi_sharing_channel_switched == 1)
 #endif
@@ -2259,7 +2279,7 @@ int slsi_start_ap(struct wiphy *wiphy, struct net_device *dev,
 
 	r = slsi_read_disconnect_ind_timeout(sdev, SLSI_PSID_UNIFI_DISCONNECT_TIMEOUT);
 	if (r != 0)
-		sdev->device_config.ap_disconnect_ind_timeout = *sdev->sig_wait_cfm_timeout + 2000;
+		sdev->device_config.ap_disconnect_ind_timeout = *sdev->sig_wait_cfm_timeout;
 
 	SLSI_NET_DBG2(dev, SLSI_CFG80211, "slsi_read_disconnect_ind_timeout: timeout = %d", sdev->device_config.ap_disconnect_ind_timeout);
 
@@ -3275,6 +3295,13 @@ struct slsi_dev                           *slsi_cfg80211_new(struct device *dev)
 
 	/* Scheduled scanning support */
 	wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+	/* Parameters for Scheduled Scanning Support */
+	wiphy->max_sched_scan_reqs = 1;
+	wiphy_ext_feature_set(wiphy, NL80211_EXT_FEATURE_SCHED_SCAN_RELATIVE_RSSI);
+#endif
+
 	/* Match the maximum number of SSIDs that could be requested from wpa_supplicant */
 	wiphy->max_sched_scan_ssids = 16;
 

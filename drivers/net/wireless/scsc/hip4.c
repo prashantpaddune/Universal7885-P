@@ -848,7 +848,7 @@ static void hip4_wq(struct work_struct *data)
 	bool                    update = false;
 	bool			no_change = true;
 	u8                      retry;
-    bool                    rx_flowcontrol = false;
+	bool                    rx_flowcontrol = false;
 
 #if defined(CONFIG_SCSC_WLAN_HIP4_PROFILING) || defined(CONFIG_SCSC_WLAN_DEBUG)
 	int                     id;
@@ -858,8 +858,10 @@ static void hip4_wq(struct work_struct *data)
 		WARN_ON(1);
 		return;
 	}
+
 	if (slsi_check_rx_flowcontrol(sdev))
-        rx_flowcontrol = true;
+		rx_flowcontrol = true;
+
 	service = sdev->service;
 
 #ifndef TASKLET
@@ -1030,9 +1032,9 @@ consume_ctl_mbulk:
 	/* Update the scoreboard */
 		if (update)
 		hip4_update_index(hip, HIP4_MIF_Q_TH_CTRL, ridx, idx_r);
-		
-		if (rx_flowcontrol)
-        goto skip_data_q;
+
+	if (rx_flowcontrol)
+		goto skip_data_q;
 
 	idx_r = hip4_read_index(hip, HIP4_MIF_Q_TH_DAT, ridx);
 	idx_w = hip4_read_index(hip, HIP4_MIF_Q_TH_DAT, widx);
@@ -1127,7 +1129,7 @@ consume_dat_mbulk:
 	if (no_change)
 		atomic_inc(&hip->hip_priv->stats.spurious_irqs);
 
-    skip_data_q:
+skip_data_q:
 	if (!atomic_read(&hip->hip_priv->closing)) {
 		/* Reset status variable. DO THIS BEFORE UNMASKING!!!*/
 		atomic_set(&hip->hip_priv->watchdog_timer_active, 0);

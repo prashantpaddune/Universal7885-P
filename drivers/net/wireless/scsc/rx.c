@@ -523,45 +523,12 @@ void slsi_scan_complete(struct slsi_dev *sdev, struct net_device *dev, u16 scan_
 	}
 
 	if (scan_id == SLSI_SCAN_SCHED_ID)
-		cfg80211_sched_scan_results(sdev->wiphy);
-	SLSI_MUTEX_UNLOCK(ndev_vif->scan_result_mutex);
-}
-
-int slsi_send_acs_event(struct slsi_dev *sdev, struct slsi_acs_selected_channels acs_selected_channels)
-{
-	struct sk_buff                         *skb = NULL;
-	u8 err = 0;
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
-	skb = cfg80211_vendor_event_alloc(sdev->wiphy, NULL, NLMSG_DEFAULT_SIZE,
-					  SLSI_NL80211_VENDOR_ACS_EVENT, GFP_KERNEL);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
+		cfg80211_sched_scan_results(sdev->wiphy, ndev_vif->scan[scan_id].sched_req->reqid);
 #else
-	skb = cfg80211_vendor_event_alloc(sdev->wiphy, NLMSG_DEFAULT_SIZE,
-					  SLSI_NL80211_VENDOR_ACS_EVENT, GFP_KERNEL);
+		cfg80211_sched_scan_results(sdev->wiphy);
 #endif
-	if (!skb) {
-		SLSI_ERR_NODEV("Failed to allocate skb for VENDOR ACS event\n");
-		return -ENOMEM;
-	}
-	err |= nla_put_u8(skb, SLSI_ACS_ATTR_PRIMARY_CHANNEL, acs_selected_channels.pri_channel);
-	err |= nla_put_u8(skb, SLSI_ACS_ATTR_SECONDARY_CHANNEL, acs_selected_channels.sec_channel);
-	err |= nla_put_u8(skb, SLSI_ACS_ATTR_VHT_SEG0_CENTER_CHANNEL, acs_selected_channels.vht_seg0_center_ch);
-	err |= nla_put_u8(skb, SLSI_ACS_ATTR_VHT_SEG1_CENTER_CHANNEL, acs_selected_channels.vht_seg1_center_ch);
-	err |= nla_put_u16(skb, SLSI_ACS_ATTR_CHWIDTH, acs_selected_channels.ch_width);
-	err |= nla_put_u8(skb, SLSI_ACS_ATTR_HW_MODE, acs_selected_channels.hw_mode);
-	SLSI_DBG3(sdev, SLSI_MLME, "pri_channel=%d,sec_channel=%d,vht_seg0_center_ch=%d,"
-				"vht_seg1_center_ch=%d, ch_width=%d, hw_mode=%d\n",
-				acs_selected_channels.pri_channel, acs_selected_channels.sec_channel,
-				acs_selected_channels.vht_seg0_center_ch, acs_selected_channels.vht_seg1_center_ch,
-				acs_selected_channels.ch_width, acs_selected_channels.hw_mode);
-	if (err) {
-		SLSI_ERR_NODEV("Failed nla_put err=%d\n", err);
-		slsi_kfree_skb(skb);
-		return -EINVAL;
-	}
-	SLSI_INFO(sdev, "Event: SLSI_NL80211_VENDOR_ACS_EVENT(%d)\n", SLSI_NL80211_VENDOR_ACS_EVENT);
-	cfg80211_vendor_event(skb, GFP_KERNEL);
-	return 0;
+	SLSI_MUTEX_UNLOCK(ndev_vif->scan_result_mutex);
 }
 
 int slsi_set_2g_auto_channel(struct slsi_dev *sdev, struct netdev_vif  *ndev_vif,
@@ -618,12 +585,7 @@ int slsi_set_2g_auto_channel(struct slsi_dev *sdev, struct netdev_vif  *ndev_vif
 			  ch_info[i].num_bss_load_ap);
 	}
 
-	if (acs_selected_channels->ch_width == 20) {
-		if (all_bss_load)
-			acs_selected_channels->pri_channel = ch_info[ch_idx_min_load_20].chan;
-		else
-			acs_selected_channels->pri_channel = ch_info[ch_idx_min_rssi_20].chan;
-	} else if (acs_selected_channels->ch_width == 40) {
+	if (acs_selected_channels->ch_width == 40) {
 		for (i = 0; i < ch_list_len; i++) {
 			if (i + 4 >= ch_list_len || !ch_info[i + 4].chan || !ch_info[i].chan)
 				continue;
@@ -655,6 +617,16 @@ int slsi_set_2g_auto_channel(struct slsi_dev *sdev, struct netdev_vif  *ndev_vif
 			acs_selected_channels->pri_channel = ch_info[ch_idx_min_rssi].chan;
 			acs_selected_channels->sec_channel = ch_info[ch_idx_min_rssi].chan + 4;
 		}
+
+		if (!acs_selected_channels->pri_channel)
+			acs_selected_channels->ch_width = 20;
+	}
+
+	if (acs_selected_channels->ch_width == 20) {
+		if (all_bss_load)
+			acs_selected_channels->pri_channel = ch_info[ch_idx_min_load_20].chan;
+		else
+			acs_selected_channels->pri_channel = ch_info[ch_idx_min_rssi_20].chan;
 	}
 	return ret;
 }
@@ -732,12 +704,45 @@ int slsi_set_5g_auto_channel(struct slsi_dev *sdev, struct netdev_vif  *ndev_vif
 			  ch_info[i].avg_chan_utilization, ch_info[i].num_bss_load_ap);
 	}
 
-	if (acs_selected_channels->ch_width == 20) {
-		if (all_bss_load || min_avg_chan_utilization_20 < 128)
-			acs_selected_channels->pri_channel = ch_info[ch_idx_min_load_20].chan;
-		else if (none_bss_load || min_avg_chan_utilization_20 >= 128)
-			acs_selected_channels->pri_channel = ch_info[ch_idx_min_ap_20].chan;
-	} else if (acs_selected_channels->ch_width == 40) {
+	if (acs_selected_channels->ch_width == 80) {
+		for (i = 0; i < ch_list_len; i++) {
+			if (i + 3 >= ch_list_len)
+				continue;
+			if (!ch_info[i].chan || !ch_info[i + 1].chan || !ch_info[i + 2].chan || !ch_info[i + 3].chan)
+				continue;
+			if (slsi_is_80mhz_5gchan(ch_info[i].chan, ch_info[i + 3].chan)) {
+				avg_load = ch_info[i].avg_chan_utilization + ch_info[i + 1].avg_chan_utilization +
+					   ch_info[i + 2].avg_chan_utilization + ch_info[i + 3].avg_chan_utilization;
+				total_num_ap = ch_info[i].num_ap + ch_info[i + 1].num_ap + ch_info[i + 2].num_ap +
+						   ch_info[i + 3].num_ap;
+				if (avg_load < min_avg_chan_utilization) {
+					min_avg_chan_utilization = avg_load;
+					ch_idx_min_load = i;
+				} else if (avg_load == min_avg_chan_utilization && total_num_ap <
+					   (ch_info[ch_idx_min_load].num_ap + ch_info[ch_idx_min_load + 1].num_ap +
+						ch_info[ch_idx_min_load + 2].num_ap +
+						ch_info[ch_idx_min_load + 3].num_ap)) {
+					ch_idx_min_load = i;
+				}
+				if (total_num_ap < min_num_ap) {
+					min_num_ap = total_num_ap;
+					ch_idx_min_ap = i;
+				}
+			}
+		}
+		if (all_bss_load || min_avg_chan_utilization <= 512) {
+			acs_selected_channels->pri_channel = ch_info[ch_idx_min_load].chan;
+			acs_selected_channels->vht_seg0_center_ch = ch_info[ch_idx_min_load].chan + 6;
+		} else if (none_bss_load || min_avg_chan_utilization > 512) {
+			acs_selected_channels->pri_channel = ch_info[ch_idx_min_ap].chan;
+			acs_selected_channels->vht_seg0_center_ch = ch_info[ch_idx_min_ap].chan + 6;
+		}
+
+		if (!acs_selected_channels->pri_channel)
+			acs_selected_channels->ch_width = 40;
+	}
+
+	if (acs_selected_channels->ch_width == 40) {
 		for (i = 0; i < ch_list_len; i++) {
 			if (!ch_info[i].chan || i + 1 >= ch_list_len || !ch_info[i + 1].chan)
 				continue;
@@ -755,9 +760,6 @@ int slsi_set_5g_auto_channel(struct slsi_dev *sdev, struct netdev_vif  *ndev_vif
 					min_num_ap = total_num_ap;
 					ch_idx_min_ap = i;
 				}
-			} else {
-				SLSI_DBG3(sdev, SLSI_MLME, "Invalid channels: %d, %d\n", ch_info[i].chan,
-					  ch_info[i + 1].chan); /*will remove after testing */
 			}
 		}
 		if (all_bss_load || min_avg_chan_utilization <= 256) {
@@ -767,42 +769,16 @@ int slsi_set_5g_auto_channel(struct slsi_dev *sdev, struct netdev_vif  *ndev_vif
 			acs_selected_channels->pri_channel = ch_info[ch_idx_min_ap].chan;
 			acs_selected_channels->sec_channel = ch_info[ch_idx_min_ap + 1].chan;
 		}
-	} else if (acs_selected_channels->ch_width == 80) {
-		for (i = 0; i < ch_list_len; i++) {
-			if (i + 3 >= ch_list_len)
-				continue;
-			if (!ch_info[i].chan || !ch_info[i + 1].chan || !ch_info[i + 2].chan || !ch_info[i + 3].chan)
-				continue;
-			if (slsi_is_80mhz_5gchan(ch_info[i].chan, ch_info[i + 3].chan)) {
-				avg_load = ch_info[i].avg_chan_utilization + ch_info[i + 1].avg_chan_utilization +
-					   ch_info[i + 2].avg_chan_utilization + ch_info[i + 3].avg_chan_utilization;
-				total_num_ap = ch_info[i].num_ap + ch_info[i + 1].num_ap + ch_info[i + 2].num_ap +
-					       ch_info[i + 3].num_ap;
-				if (avg_load < min_avg_chan_utilization) {
-					min_avg_chan_utilization = avg_load;
-					ch_idx_min_load = i;
-				} else if (avg_load == min_avg_chan_utilization && total_num_ap <
-					   (ch_info[ch_idx_min_load].num_ap + ch_info[ch_idx_min_load + 1].num_ap +
-					    ch_info[ch_idx_min_load + 2].num_ap +
-					    ch_info[ch_idx_min_load + 3].num_ap)) {
-					ch_idx_min_load = i;
-				}
-				if (total_num_ap < min_num_ap) {
-					min_num_ap = total_num_ap;
-					ch_idx_min_ap = i;
-				}
-			} else {
-				SLSI_DBG3(sdev, SLSI_MLME, "Invalid channels: %d, %d\n", ch_info[i].chan,
-					  ch_info[i + 3].chan);      /*will remove after testing */
-			}
-		}
-		if (all_bss_load || min_avg_chan_utilization <= 512) {
-			acs_selected_channels->pri_channel = ch_info[ch_idx_min_load].chan;
-			acs_selected_channels->vht_seg0_center_ch = ch_info[ch_idx_min_load].chan + 6;
-		} else if (none_bss_load || min_avg_chan_utilization > 512) {
-			acs_selected_channels->pri_channel = ch_info[ch_idx_min_ap].chan;
-			acs_selected_channels->vht_seg0_center_ch = ch_info[ch_idx_min_ap].chan + 6;
-		}
+
+		if (!acs_selected_channels->pri_channel)
+			acs_selected_channels->ch_width = 20;
+	}
+
+	if (acs_selected_channels->ch_width == 20) {
+		if (all_bss_load || min_avg_chan_utilization_20 < 128)
+			acs_selected_channels->pri_channel = ch_info[ch_idx_min_load_20].chan;
+		else if (none_bss_load || min_avg_chan_utilization_20 >= 128)
+			acs_selected_channels->pri_channel = ch_info[ch_idx_min_ap_20].chan;
 	}
 	return ret;
 }
@@ -896,7 +872,6 @@ next_scan:
 	}
 	SLSI_MUTEX_UNLOCK(ndev_vif->scan_result_mutex);
 	slsi_skb_queue_purge(&unique_scan_results);
-	SLSI_DBG3(sdev, SLSI_MLME, "slsi_acs_scan_results Received end point\n");      /*will remove after testing */
 	return ch_info;
 }
 
@@ -1003,6 +978,7 @@ void slsi_rx_channel_switched_ind(struct slsi_dev *sdev, struct net_device *dev,
 	chandef.center_freq2 = 0;
 
 	ndev_vif->ap.channel_freq = freq; /* updated for GETSTAINFO */
+	ndev_vif->chan = chandef.chan;
 
 	cfg80211_ch_switch_notify(dev, &chandef);
 	slsi_kfree_skb(skb);
@@ -1382,7 +1358,7 @@ void slsi_rx_roam_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_b
 
 	SLSI_UNUSED_PARAMETER(sdev);
 
-	SLSI_NET_DBG1(dev, SLSI_MLME, "mlme_roam_ind(vif:%d, aid:0, result:%d )\n",
+	SLSI_NET_DBG1(dev, SLSI_MLME, "mlme_roam_ind(vif:%d, aid:0, result:0x%04x )\n",
 		      fapi_get_vif(skb),
 		      fapi_get_u16(skb, u.mlme_roam_ind.result_code));
 
@@ -1654,7 +1630,7 @@ void slsi_rx_reassoc_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 	u8                        *reassoc_rsp_ie = NULL;
 	int                       reassoc_rsp_ie_len = 0;
 
-	SLSI_NET_DBG1(dev, SLSI_MLME, "mlme_reassoc_ind(vif:%d, result:0x%2x)\n",
+	SLSI_NET_DBG1(dev, SLSI_MLME, "mlme_reassoc_ind(vif:%d, result:0x%04x)\n",
 		      fapi_get_vif(skb),
 		      fapi_get_u16(skb, u.mlme_reassociate_ind.result_code));
 
@@ -1770,9 +1746,8 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 
 	fw_result_code = fapi_get_u16(skb, u.mlme_connect_ind.result_code);
 
-	SLSI_NET_DBG1(dev, SLSI_MLME, "mlme_connect_ind(vif:%d, result:%d)\n",
+	SLSI_NET_DBG1(dev, SLSI_MLME, "mlme_connect_ind(vif:%d, result:0x%04x)\n",
 		      fapi_get_vif(skb), fw_result_code);
-	SLSI_INFO(sdev, "Received Association Response\n");
 
 	if (!ndev_vif->activated) {
 		SLSI_NET_DBG1(dev, SLSI_MLME, "VIF not activated\n");
@@ -1796,9 +1771,22 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 	}
 	sdev->assoc_result_code = fw_result_code;
 	if (fw_result_code != FAPI_RESULTCODE_SUCCESS) {
-		SLSI_NET_ERR(dev, "Connect failed. FAPI code:%d\n", fw_result_code);
+		if (fw_result_code == FAPI_RESULTCODE_AUTH_NO_ACK) {
+			SLSI_INFO(sdev, "Connect failed,Result code:AUTH_NO_ACK\n");
+		} else if (fw_result_code == FAPI_RESULTCODE_ASSOC_NO_ACK) {
+			SLSI_INFO(sdev, "Connect failed,Result code:ASSOC_NO_ACK\n");
+		} else if (fw_result_code >= 0x8100 && fw_result_code <= 0x81FF) {
+			fw_result_code = fw_result_code & 0x00FF;
+			SLSI_INFO(sdev, "Connect failed(Auth failure), Result code:0x%04x\n", fw_result_code);
+		} else if (fw_result_code >= 0x8200 && fw_result_code <= 0x82FF) {
+			fw_result_code = fw_result_code & 0x00FF;
+			SLSI_INFO(sdev, "Connect failed(Assoc Failure), Result code:0x%04x\n", fw_result_code);
+		} else {
+			SLSI_INFO(sdev, "Connect failed,Result code:0x%04x\n", fw_result_code);
+		}
 		status = fw_result_code;
 	} else {
+		SLSI_INFO(sdev, "Received Association Response\n");
 		if (!peer || !peer->assoc_ie) {
 			if (peer)
 				WARN(!peer->assoc_ie, "proc-started-ind not received before connect-ind");
@@ -1978,9 +1966,12 @@ void slsi_rx_disconnected_ind(struct slsi_dev *sdev, struct net_device *dev, str
 #endif
 	if (reason >= 0 && reason <= 0xFF) {
 		SLSI_INFO(sdev, "Received DEAUTH, reason = %d\n", reason);
-	} else if (reason >= 0x8200 && reason <= 0x82FF) {
+	} else if (reason >= 0x8100 && reason <= 0x81FF) {
 		reason = reason & 0x00FF;
 		SLSI_INFO(sdev, "Received DEAUTH, reason = %d\n", reason);
+	} else if (reason >= 0x8200 && reason <= 0x82FF) {
+		reason = reason & 0x00FF;
+		SLSI_INFO(sdev, "Received DISASSOC, reason = %d\n", reason);
 	} else {
 		SLSI_INFO(sdev, "Received DEAUTH, reason = Local Disconnect <%d>\n", reason);
 	}
@@ -2271,9 +2262,10 @@ void slsi_rx_received_frame_ind(struct slsi_dev *sdev, struct net_device *dev, s
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	u16 data_unit_descriptor = fapi_get_u16(skb, u.mlme_received_frame_ind.data_unit_descriptor);
 	u16 frequency = SLSI_FREQ_FW_TO_HOST(fapi_get_u16(skb, u.mlme_received_frame_ind.channel_frequency));
-	u8 *eapol = NULL;
+	u8 *eap = NULL;
 	u16 protocol = 0;
 	u32 dhcp_message_type = SLSI_DHCP_MESSAGE_TYPE_INVALID;
+	u16                 eap_length = 0;
 
 	SLSI_NET_DBG2(dev, SLSI_MLME, "mlme_received_frame_ind(vif:%d, data descriptor:%d, freq:%d)\n",
 		      fapi_get_vif(skb),
@@ -2364,33 +2356,25 @@ void slsi_rx_received_frame_ind(struct slsi_dev *sdev, struct net_device *dev, s
 		dev->last_rx = jiffies;
 
 		/* Storing Data for Logging Information */
-		if ((skb->len + sizeof(struct ethhdr)) >= 99)
-			eapol = skb->data + sizeof(struct ethhdr);
+		if ((skb->len - sizeof(struct ethhdr)) >= 9) {
+			eap_length = (skb->len - sizeof(struct ethhdr)) - 4;
+			eap = skb->data + sizeof(struct ethhdr);
+		}
 		if (skb->len >= 285 && slsi_is_dhcp_packet(skb->data) != SLSI_TX_IS_NOT_DHCP)
 			dhcp_message_type = skb->data[284];
 
 		skb->protocol = eth_type_trans(skb, dev);
 		protocol = ntohs(skb->protocol);
-		if (protocol == ETH_P_PAE && eapol) {
-			if (eapol[SLSI_EAPOL_IEEE8021X_TYPE_POS] == SLSI_IEEE8021X_TYPE_EAPOL_KEY) {
-				if ((eapol[SLSI_EAPOL_TYPE_POS] == SLSI_EAPOL_TYPE_RSN_KEY ||
-				     eapol[SLSI_EAPOL_TYPE_POS] == SLSI_EAPOL_TYPE_WPA_KEY) &&
-				    (eapol[SLSI_EAPOL_KEY_INFO_LOWER_BYTE_POS] &
-				     SLSI_EAPOL_KEY_INFO_KEY_TYPE_BIT_IN_LOWER_BYTE) &&
-				    (eapol[SLSI_EAPOL_KEY_INFO_HIGHER_BYTE_POS] &
-				     SLSI_EAPOL_KEY_INFO_MIC_BIT_IN_HIGHER_BYTE) &&
-				    (eapol[SLSI_EAPOL_KEY_DATA_LENGTH_HIGHER_BYTE_POS] == 0) &&
-				    (eapol[SLSI_EAPOL_KEY_DATA_LENGTH_LOWER_BYTE_POS] == 0)) {
-					SLSI_INFO(sdev, "Received 4way-H/S, M4\n");
-				} else if (!(eapol[SLSI_EAPOL_KEY_INFO_HIGHER_BYTE_POS] &
-					     SLSI_EAPOL_KEY_INFO_MIC_BIT_IN_HIGHER_BYTE)) {
-					SLSI_INFO(sdev, "Received 4way-H/S, M1\n");
-				} else if (eapol[SLSI_EAPOL_KEY_INFO_HIGHER_BYTE_POS] &
-					   SLSI_EAPOL_KEY_INFO_SECURE_BIT_IN_HIGHER_BYTE) {
-					SLSI_INFO(sdev, "Received 4way-H/S, M3\n");
-				} else {
-					SLSI_INFO(sdev, "Received 4way-H/S, M2\n");
-				}
+		if (protocol == ETH_P_PAE) {
+			if (eap && eap[SLSI_EAPOL_IEEE8021X_TYPE_POS] == SLSI_IEEE8021X_TYPE_EAP_PACKET) {
+				if (eap[SLSI_EAP_CODE_POS] == SLSI_EAP_PACKET_REQUEST)
+					SLSI_INFO(sdev, "Received EAP-Request (%d)\n", eap_length);
+				else if (eap[SLSI_EAP_CODE_POS] == SLSI_EAP_PACKET_RESPONSE)
+					SLSI_INFO(sdev, "Received EAP-Response (%d)\n", eap_length);
+				else if (eap[SLSI_EAP_CODE_POS] == SLSI_EAP_PACKET_SUCCESS)
+					SLSI_INFO(sdev, "Received EAP-Success (%d)\n", eap_length);
+				else if (eap[SLSI_EAP_CODE_POS] == SLSI_EAP_PACKET_FAILURE)
+					SLSI_INFO(sdev, "Received EAP-Failure (%d)\n", eap_length);
 			}
 		} else if (protocol == ETH_P_IP) {
 			if (dhcp_message_type == SLSI_DHCP_MESSAGE_TYPE_DISCOVER)

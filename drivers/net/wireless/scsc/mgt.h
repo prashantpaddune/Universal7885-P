@@ -45,6 +45,21 @@
 #define SLSI_EAPOL_KEY_DATA_LENGTH_HIGHER_BYTE_POS          (97)
 #define SLSI_EAPOL_KEY_DATA_LENGTH_LOWER_BYTE_POS           (98)
 
+#define SLSI_EAP_CODE_POS                 (4)
+#define SLSI_EAP_PACKET_REQUEST     (1)
+#define SLSI_EAP_PACKET_RESPONSE   (2)
+#define SLSI_EAP_PACKET_SUCCESS     (3)
+#define SLSI_EAP_PACKET_FAILURE      (4)
+#define SLSI_EAP_TYPE_POS                  (8)
+#define SLSI_EAP_TYPE_EXPANDED       (254)
+#define SLSI_EAP_OPCODE_POS                      (16)
+#define SLSI_EAP_OPCODE_WSC_MSG          (4)
+#define SLSI_EAP_OPCODE_WSC_START          (1)
+#define SLSI_EAP_MSGTYPE_POS                    (27)
+#define SLSI_EAP_MSGTYPE_M8                    (12)
+#define SLSI_EAP_WPS_DWELL_TIME           (100000)       /*100 ms */
+#define SLSI_EAP_TYPE_IDENTITY           (1)
+
 #define SLSI_80211_AC_VO 0
 #define SLSI_80211_AC_VI 1
 #define SLSI_80211_AC_BE 2
@@ -476,6 +491,7 @@ int slsi_read_unifi_countrylist(struct slsi_dev *sdev, u16 psid);
 int slsi_read_default_country(struct slsi_dev *sdev, u8 *alpha2, u16 index);
 int slsi_read_disconnect_ind_timeout(struct slsi_dev *sdev, u16 psid);
 int slsi_read_regulatory_rules(struct slsi_dev *sdev, struct slsi_802_11d_reg_domain *domain_info, const char *alpha2);
+int slsi_send_acs_event(struct slsi_dev *sdev, struct slsi_acs_selected_channels acs_selected_channels);
 #ifdef CONFIG_SCSC_WLAN_ENABLE_MAC_RANDOMISATION
 int slsi_set_mac_randomisation_mask(struct slsi_dev *sdev, u8 *mac_address_mask);
 #endif
