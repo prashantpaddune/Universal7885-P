@@ -812,7 +812,6 @@
 			imagis,afe_base = <0x0110>;
 			imagis,factory_item_version = <1>;
 			status = "disabled";
-            support_dex_mode;
 		};
 	};
 
