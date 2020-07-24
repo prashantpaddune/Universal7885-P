@@ -63,10 +63,17 @@ struct flip_cover_drvdata *gddata;
 static ssize_t flip_cover_detect_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
+#ifdef CONFIG_HALL_EVENT_REVERSE
+	if (test_bit(SW_FLIP, gddata->input->sw))
+		sprintf(buf, "CLOSE\n");
+	else
+		sprintf(buf, "OPEN\n");
+#else
 	if (test_bit(SW_FLIP, gddata->input->sw))
 		sprintf(buf, "OPEN\n");
 	else
 		sprintf(buf, "CLOSE\n");
+#endif
 	return strlen(buf);
 }
 static ssize_t certify_hall_detect_show(struct device *dev,
@@ -116,7 +123,14 @@ static void flip_cover_work(struct work_struct *work)
 		state = first ^ hall->active_low;
 		pr_info("%s %s\n", hall->name,
 			hall->state ? "open" : "close");
+#ifdef CONFIG_HALL_EVENT_REVERSE
+		if (!strncmp(hall->name, "hall", 4))
+			input_report_switch(hall->input, hall->event, !state);
+		else
+			input_report_switch(hall->input, hall->event, state);
+#else
 		input_report_switch(hall->input, hall->event, state);
+#endif
 		input_sync(hall->input);
 	} else
 		pr_info("%s %d,%d\n", hall->name,
@@ -133,7 +147,14 @@ static void flip_cover_work(struct work_struct *work)
 	state = hall->state ^ hall->active_low;
 	pr_info("%s %s\n", hall->name,
 		hall->state ? "open" : "close");
+#ifdef CONFIG_HALL_EVENT_REVERSE
+	if (!strncmp(hall->name, "hall", 4))
+		input_report_switch(hall->input, hall->event, !state);
+	else
+		input_report_switch(hall->input, hall->event, state);
+#else
 	input_report_switch(hall->input, hall->event, state);
+#endif
 	input_sync(hall->input);
 }
 #endif
