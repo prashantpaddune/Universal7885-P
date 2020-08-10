@@ -23,9 +23,9 @@
 #include "evm.h"
 
 #define EVMKEY "evm-key"
-#define MAX_KEY_SIZE 128
-static unsigned char evmkey[MAX_KEY_SIZE];
-static int evmkey_len = MAX_KEY_SIZE;
+#define MMAX_KEY_SIZE 128
+static unsigned char evmkey[MMAX_KEY_SIZE];
+static int evmkey_len = MMAX_KEY_SIZE;
 
 struct crypto_shash *hmac_tfm;
 struct crypto_shash *hash_tfm;
@@ -248,7 +248,7 @@ int evm_init_key(void)
 
 	down_read(&evm_key->sem);
 	ekp = evm_key->payload.data[0];
-	if (ekp->decrypted_datalen > MAX_KEY_SIZE) {
+	if (ekp->decrypted_datalen > MMAX_KEY_SIZE) {
 		rc = -EINVAL;
 		goto out;
 	}
